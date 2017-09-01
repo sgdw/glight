@@ -50,6 +50,15 @@ import argparse
 from time import sleep
 import traceback
 
+from pydbus import SystemBus, SessionBus
+from pydbus.generic import signal
+try:
+    from gi.repository import GLib
+except ImportError:
+    import glib as GLib
+
+from os import stat
+
 app_version = "0.1"
 
 default_time = 1000
@@ -102,6 +111,8 @@ class UsbBackend(object):
         """"""
         pass
 
+    def handle_events(self):
+        pass
 
     def _log(self, msg):
         if self.verbose:
@@ -249,8 +260,8 @@ class UsbBackendUsb1(UsbBackend):
         transfer.submit()
         return transfer
 
-        # return self.device.interruptRead(endpoint, length, timeout)
-
+    def handle_events(self, timeout=0):
+        self.context.handleEventsTimeout(timeout)
 
 class GDeviceRegistry(object):
     """Enumerates the available G-Devices"""
@@ -306,12 +317,15 @@ class GDevice(object):
 
         # mutexes
         self.wait_on_interrupt = False
+        self.wait_lock = None
 
         # binary commands in hex format
         self.cmd_prepare = None
         self.cmd_color   = "{}{}"
         self.cmd_breathe = "{}{}"
         self.cmd_cycle   = "{}"
+
+        self.interrupt_length = 20
 
     def _init_backend(self):
         """"""
@@ -346,17 +360,19 @@ class GDevice(object):
 
     def begin_interrupt(self):
         if self._can_do_interrup():
-            self.backend.read_interrupt(endpoint=self.ep_inter, length=1000, callback=self.on_interrupt,
-                                        user_data=None, timeout=1000)
+            self.backend.read_interrupt(endpoint=self.ep_inter, length=self.interrupt_length, callback=self.on_interrupt,
+                                        user_data=None, timeout=5000)
             self.wait_on_interrupt = True
 
     def end_interrupt(self): # ChangeMe: stupid busy wait ...
         if self._can_do_interrup():
-            max_iter = 100000
+            max_iter = 10000
             while self.wait_on_interrupt:
                 max_iter = max_iter-1
+                self.backend.handle_events()
                 if max_iter == 0:
                     self._log("Did not get a interrupt response in time")
+                    # yield # hack ... works but why?
                     return
 
     def send_data(self, data):
@@ -425,7 +441,7 @@ class GDevice(object):
 
 
 class G203(GDevice):
-    """Abstract G-Device"""
+    """Logitech G203 Mouse Support"""
 
     def __init__(self, backend_type=UsbBackend.TYPE_DEFAULT):
         """"""
@@ -456,16 +472,23 @@ class G203(GDevice):
         # binary commands in hex format
         self.cmd_prepare = "10ff0e0d000000"
         #                   10ff0e0d000000
-        #                   10ff0f4d000000
+        #                   10ff0f4d000000 # another prepare command?
         self.cmd_color   = "11ff0e3d{}01{}0200000000000000000000"
-        #                   11ff0e3d00018000ff0200000000000000000000
+        #                   11ff0e3d00018000ff0200000000000000000000 # similar to G213
         #                               RRGGBB
-        self.cmd_breathe = "11ff0c3a0002{}{}006400000000000000"
-        self.cmd_cycle   = "11ff0c3a0003ffffff0000{}64000000000000"
+        self.cmd_breathe = "11ff0e3d0003{}{}006400000000000000"
+        #                   11ff0e3d00038000ff2af8000100000000000000 # darkest
+        #                   11ff0e3d00038000ff2af8006400000000000000 # brightest
+        #                               RRGGBB
+        self.cmd_cycle   = "11ff0e3d00020000000000{}64000000000000"
+        #                   11ff0e3d000200000000002af864000000000000
+        #                   11ff0e3d000200000000002af801000000000000 # darkest
+        #                   11ff0e3d0002000000000003e864000000000000 # fastest
+        #                   11ff0e3d000200000000004e2064000000000000 # slowest
 
 
 class G213(GDevice):
-    """Abstract G-Device"""
+    """Logitech G213 Keyboard Support"""
 
     def __init__(self, backend_type=UsbBackend.TYPE_DEFAULT):
         """"""
@@ -500,34 +523,112 @@ class G213(GDevice):
         self.cmd_cycle   = "11ff0c3a0003ffffff0000{}64000000000000"
 
 
-if __name__ == "__main__":
+class GlightService(object):
+    """
+      <node>
+        <interface name='net.lew21.pydbus.ClientServerExample'>
+          <method name='EchoString'>
+            <arg type='s' name='a' direction='in'/>
+            <arg type='s' name='response' direction='out'/>
+          </method>
+          <method name='Quit'/>
+          <property name="SomeProperty" type="s" access="readwrite">
+            <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+          </property>
+        </interface>
+      </node>
+    """
 
-    # Args ----------------------------------------
+    # see: https://github.com/LEW21/pydbus/blob/master/doc/tutorial.rst
 
-    argsparser = argparse.ArgumentParser(description='Changes the colors on some Logitech devices (V' + app_version + ')', add_help=False)
-    # argsparser.add_argument('arguments',        type=str, nargs='?', help='keywords used to search', metavar='ARGUMENT')
-    argsparser.add_argument('-d', '--device',   dest='device',  nargs='?', action='store', help='set device', metavar='device_name')
-    argsparser.add_argument('-c', '--color',    dest='colors',  nargs='*', action='store', help='set color(s)', metavar='color')
-    argsparser.add_argument('-x', '--cycle',    dest='cycle',   nargs=1,   action='store', help='set time', metavar='speed')
-    argsparser.add_argument('-b', '--breathe',  dest='breathe', nargs=2,   action='store', help='set breathing animation', metavar=('color', 'speed'))
-    argsparser.add_argument('--backend',        dest='backend', nargs='?', action='store', help='set backend (usb1, pyusb)', metavar='(usb1|pyusb)')
-    argsparser.add_argument('-l', '--list',     dest='do_list', action='store_const', const=True, help='list devices')
-    argsparser.add_argument('-v', '--verbose',  dest='verbose', action='store_const', const=True, help='be verbose')
-    argsparser.add_argument('-h', '--help',     dest='help',    action='store_const', const=True, help='show help')
+    PropertiesChanged = signal()
 
-    args = argsparser.parse_args()
+    bus_name = "net.lew21.pydbus.ClientServerExample"
+    bus_path = "/" + bus_name.replace(".", "/")
 
-    if args.help:
-        argsparser.print_help()
-        print()
-        sys.exit(0)
+    def __init__(self):
+        """"""
+        self._someProperty = "initial value"
+        self.loop = None
 
-    verbose = args.verbose
+    def run(self):
+        """"""
+        self.loop = GLib.MainLoop()
 
-    if verbose:
-        print(args)
+        bus = SessionBus()
+        bus.publish(self.bus_name, self)
 
-    try:
+        self.loop.run()
+
+    # Implementation below
+    def EchoString(self, s):
+        """returns whatever is passed to it"""
+        print("EchoString('{}')".format(s))
+        return s
+
+    def Quit(self):
+        """removes this object from the DBUS connection and exits"""
+        print("Quit()")
+        if self.loop is not None:
+            self.loop.quit()
+
+    @property
+    def SomeProperty(self):
+        return self._someProperty
+
+    @SomeProperty.setter
+    def SomeProperty(self, value):
+        self._someProperty = value
+        self.PropertiesChanged(self.bus_name, {"SomeProperty": self.SomeProperty}, [])
+
+
+class GlightClient(object):
+
+    def __init__(self):
+        """"""
+
+        self.loop = None;
+
+    def do(self):
+
+        print(GlightService.bus_name)
+        print(GlightService.bus_path)
+
+        # get the session bus
+        bus = SessionBus()
+
+        self.loop = GLib.MainLoop()
+
+        # get the object
+        the_object = bus.get(GlightService.bus_name)
+
+        reply = the_object.EchoString("test 123")
+        print(reply)
+
+        dbus_filter = GlightService.bus_path
+        bus.subscribe(object=dbus_filter, signal_fired=self.on_signal_emission)
+
+        the_object.SomeProperty = "Mae was here"
+
+        # the_object.Quit()
+
+        self.loop.run()
+
+    def on_signal_emission(self, *args):
+        """
+        Callback on emitting signal from server
+        """
+        print("Message: ", args)
+        print("Data: ", str(args[4][0]))
+
+        if self.loop is not None:
+            self.loop.quit()
+
+class GlightApp(object):
+
+    @staticmethod
+    def handle_device_control(args, verbose=False):
+        """"""
         backend_type = UsbBackend.TYPE_DEFAULT
         if args.backend is not None:
             backend_type = args.backend
@@ -542,7 +643,7 @@ if __name__ == "__main__":
             print("{} devices found:".format(len(found_devices)))
             i = 0
             for found_device in found_devices:
-                i = i+1
+                i = i + 1
                 print("[{}] {}".format(i, found_device.device_name))
 
         if args.device is None:
@@ -588,6 +689,60 @@ if __name__ == "__main__":
                 if verbose:
                     print("Disconnecting from device '{}'".format(device.device_name))
                 device.disconnect()
+
+
+    @staticmethod
+    def handle_experimental_features(args, verbose=False):
+        """"""
+        for experiment in args.experimental:
+            if experiment == 'dbus-service':
+                srv = GlightService()
+                srv.run()
+                sys.exit(0)
+
+            elif experiment == 'dbus-client':
+                client = GlightClient()
+                client.do()
+
+            else:
+                print("Unknown experimental feature '{}'".format(experiment))
+                sys.exit(2)
+
+
+if __name__ == "__main__":
+
+    # Args ----------------------------------------
+
+    argsparser = argparse.ArgumentParser(description='Changes the colors on some Logitech devices (V' + app_version + ')', add_help=False)
+    # argsparser.add_argument('arguments',        type=str, nargs='?', help='keywords used to search', metavar='ARGUMENT')
+    argsparser.add_argument('-d', '--device',   dest='device',  nargs='?', action='store', help='set device', metavar='device_name')
+    argsparser.add_argument('-c', '--color',    dest='colors',  nargs='*', action='store', help='set color(s)', metavar='color')
+    argsparser.add_argument('-x', '--cycle',    dest='cycle',   nargs=1,   action='store', help='set time', metavar='speed')
+    argsparser.add_argument('-b', '--breathe',  dest='breathe', nargs=2,   action='store', help='set breathing animation', metavar=('color', 'speed'))
+    argsparser.add_argument('--backend',        dest='backend', nargs='?', action='store', help='set backend (usb1, pyusb)', metavar='(usb1|pyusb)')
+    argsparser.add_argument('-l', '--list',     dest='do_list', action='store_const', const=True, help='list devices')
+    argsparser.add_argument('-v', '--verbose',  dest='verbose', action='store_const', const=True, help='be verbose')
+    argsparser.add_argument('-h', '--help',     dest='help',    action='store_const', const=True, help='show help')
+
+    argsparser.add_argument('--experimental', dest='experimental', nargs='*', action='store', help='experimental features')
+
+    args = argsparser.parse_args()
+
+    if args.help:
+        argsparser.print_help()
+        print()
+        sys.exit(0)
+
+    if args.verbose:
+        print(args)
+
+    try:
+        if args.experimental is not None:
+            GlightApp.handle_experimental_features(args=args, verbose=args.verbose)
+        else:
+            GlightApp.handle_device_control(args=args, verbose=args.verbose)
+
+        # ################################################################################################
 
     except Exception as ex:
         print("Exception: {}".format(ex))
