@@ -220,8 +220,11 @@ class UsbBackendUsb1(UsbBackend):
 
         # if a kernel driver is attached to the interface detach it, otherwise no data can be send
         if self.device.kernelDriverActive(self.w_index):
+            self._log("Detaching kernel on interface {}".format(self.w_index))
             self.device.detachKernelDriver(self.w_index)
             self.is_detached = True
+        else:
+            self._log("Kernel not active on interface {}".format(self.w_index))
 
         self.interface = self.get_interface()
 
@@ -243,7 +246,11 @@ class UsbBackendUsb1(UsbBackend):
 
         # reattach kernel driver, otherwise special key will not work
         if self.is_detached:
+            self._log("Attaching kernel on interface {}".format(self.w_index))
             self.device.attachKernelDriver(self.w_index)
+
+        # self.context.close()
+        # self.device.close()
 
     def get_interface(self):
         """"""
@@ -251,7 +258,7 @@ class UsbBackendUsb1(UsbBackend):
 
     def send_data(self, bm_request_type, bm_request, w_value, data):
         # decode data to binary and send it
-        self._log(">> '{}'".format(data))
+        self._log("Send >> '{}'".format(data))
         self.device.controlWrite(bm_request_type, bm_request, w_value, self.w_index, binascii.unhexlify(data), 1000)
 
     def read_interrupt(self, endpoint, length, callback=None, user_data=None, timeout=0):
@@ -263,6 +270,7 @@ class UsbBackendUsb1(UsbBackend):
 
     def handle_events(self, timeout=0):
         self.context.handleEventsTimeout(timeout)
+
 
 class GDeviceRegistry(object):
     """Enumerates the available G-Devices"""
@@ -370,7 +378,7 @@ class GDevice(object):
             max_iter = 10000
             while self.wait_on_interrupt:
                 max_iter = max_iter-1
-                # self.backend.handle_events()
+                self.backend.handle_events()
                 if max_iter == 0:
                     self._log("Did not get a interrupt response in time")
                     yield # hack ... works but why?
@@ -378,13 +386,11 @@ class GDevice(object):
 
     def send_data(self, data):
         if self.cmd_prepare is not None:
-            self._log(">> '{}'".format(self.cmd_prepare))
             self.begin_interrupt()
             self.backend.send_data(self.bm_request_type, self.bm_request, self.w_value, self.cmd_prepare)
             sleep(self.timeout_after_prepare)
             self.end_interrupt()
 
-        self._log(">> '{}'".format(data))
         self.begin_interrupt()
         self.backend.send_data(self.bm_request_type, self.bm_request, self.w_value, data)
         sleep(self.timeout_after_cmd)
@@ -663,6 +669,7 @@ class GlightApp(object):
 
         if device is not None:
             device.verbose = verbose
+            device.backend.verbose = verbose
             try:
                 if verbose:
                     print("Connecting to device '{}'".format(device.device_name, device.backend.device))
