@@ -196,7 +196,7 @@ class UsbBackendUsb1(UsbBackend):
         """"""
         super(UsbBackendUsb1, self).__init__(vendor_id, product_id, w_index)
         self.context = usb1.USBContext()
-        self.interfaces = []
+        self.interface = None
         self.supports_interrupts = True
 
     def get_usb_device(self):
@@ -223,50 +223,46 @@ class UsbBackendUsb1(UsbBackend):
             self.device.detachKernelDriver(self.w_index)
             self.is_detached = True
 
-        self.claim_interface(1)
+        self.interface = self.get_interface()
 
         return self.device
 
     def disconnect(self):
-        self._log("Disconnecting device")
+        # free device resource to be able to reattach kernel driver
+        # usb.util.dispose_resources(self.device)
 
         try:
-            if self.interfaces is not None:
-                # self.interface
-                for interface in self.interfaces:
-                    self._log("Releasing interface {}".format(self.w_index))
-                    self.device.releaseInterface(self.w_index)
+            if self.interface is not None:
+                self.device.releaseInterface(self.w_index)
         except Exception as ex:
             self._log("Exception while releasing interface: {}".format(ex))
         finally:
-            # self._log("Closing device")
+            # self.context.
             # self.device.close()
             pass
 
         # reattach kernel driver, otherwise special key will not work
         if self.is_detached:
-            self._log("Attaching kernel driver for interface {}".format(self.w_index))
             self.device.attachKernelDriver(self.w_index)
 
-        # self.device.close()
-        # self.context.close()
-
-    def claim_interface(self, w_index=None):
+    def get_interface(self):
         """"""
-        if w_index is None:
-            w_index = self.w_index
-
-        self.interfaces.append(w_index)
-        return self.device.claimInterface(w_index)
+        return self.device.claimInterface(self.w_index)
 
     def send_data(self, bm_request_type, bm_request, w_value, data):
         # decode data to binary and send it
-        self._log("Send >> '{}'".format(data))
+        self._log(">> '{}'".format(data))
         self.device.controlWrite(bm_request_type, bm_request, w_value, self.w_index, binascii.unhexlify(data), 1000)
+
+    def read_interrupt(self, endpoint, length, callback=None, user_data=None, timeout=0):
+        """"""
+        transfer = self.device.getTransfer() # type: usb1.USBTransfer
+        transfer.setInterrupt(endpoint=endpoint, buffer_or_len=length, callback=callback, user_data=user_data, timeout=timeout)
+        transfer.submit()
+        return transfer
 
     def handle_events(self, timeout=0):
         self.context.handleEventsTimeout(timeout)
-        # self.context.handleEvents()
 
 class GDeviceRegistry(object):
     """Enumerates the available G-Devices"""
@@ -342,8 +338,6 @@ class GDevice(object):
             else:
                 raise ValueError("Unknown Backend {}".format(self.backend_type))
 
-            self.backend.verbose = self.verbose
-
     def exists(self):
         """"""
         self._init_backend()
@@ -362,22 +356,18 @@ class GDevice(object):
         self.wait_on_interrupt = False
         self._log("Received interrupt from sender: {}".format(sender))
 
-    def _can_do_interrupt(self):
+    def _can_do_interrup(self):
         return self.backend.supports_interrupts and self.ep_inter is not None
 
     def begin_interrupt(self):
-        if self._can_do_interrupt():
-            self._log("Sending interrupt to endpoint {}".format(hex(self.ep_inter)))
+        if self._can_do_interrup():
             self.backend.read_interrupt(endpoint=self.ep_inter, length=self.interrupt_length, callback=self.on_interrupt,
                                         user_data=None, timeout=5000)
             self.wait_on_interrupt = True
-        else:
-            self._log("Not waiting for an interrupt (supports_interrupts={}; ep_inter={})".format(self.backend.supports_interrupts, self.ep_inter))
 
     def end_interrupt(self): # ChangeMe: stupid busy wait ...
-        if self._can_do_interrupt():
-            self._log("Waiting for an interrupt")
-            max_iter = 100000
+        if self._can_do_interrup():
+            max_iter = 10000
             while self.wait_on_interrupt:
                 max_iter = max_iter-1
                 # self.backend.handle_events()
@@ -386,15 +376,15 @@ class GDevice(object):
                     yield # hack ... works but why?
                     return
 
-            self._log("Finished waiting for an interrupt")
-
     def send_data(self, data):
         if self.cmd_prepare is not None:
+            self._log(">> '{}'".format(self.cmd_prepare))
             self.begin_interrupt()
             self.backend.send_data(self.bm_request_type, self.bm_request, self.w_value, self.cmd_prepare)
             sleep(self.timeout_after_prepare)
             self.end_interrupt()
 
+        self._log(">> '{}'".format(data))
         self.begin_interrupt()
         self.backend.send_data(self.bm_request_type, self.bm_request, self.w_value, data)
         sleep(self.timeout_after_cmd)
@@ -673,7 +663,6 @@ class GlightApp(object):
 
         if device is not None:
             device.verbose = verbose
-            device.backend.verbose = verbose
             try:
                 if verbose:
                     print("Connecting to device '{}'".format(device.device_name, device.backend.device))
