@@ -57,7 +57,7 @@ try:
 except ImportError:
     import glib as GLib
 
-from os import stat
+from threading import Semaphore
 
 app_version = "0.1"
 
@@ -195,18 +195,20 @@ class UsbBackendUsb1(UsbBackend):
     def __init__(self, vendor_id, product_id, w_index):
         """"""
         super(UsbBackendUsb1, self).__init__(vendor_id, product_id, w_index)
-        self.context = usb1.USBContext()
+        self.context = None
         self.interface = None
         self.supports_interrupts = True
 
     def get_usb_device(self):
         """"""
+        self._assert_valid_usb_context()
         return self.context.openByVendorIDAndProductID(
             vendor_id=self.vendor_id,
             product_id=self.product_id,
             skip_on_error=True)
 
     def connect(self, device=None):
+        self._assert_valid_usb_context()
 
         # find G product
         if device is None:
@@ -249,8 +251,13 @@ class UsbBackendUsb1(UsbBackend):
             self._log("Attaching kernel on interface {}".format(self.w_index))
             self.device.attachKernelDriver(self.w_index)
 
-        # self.context.close()
-        # self.device.close()
+        if self.device is not None:
+            self.device.close()
+            self.device = None
+
+        if self.context is not None:
+            self.context.close()
+            self.context = None
 
     def get_interface(self):
         """"""
@@ -271,6 +278,10 @@ class UsbBackendUsb1(UsbBackend):
     def handle_events(self, timeout=0):
         self.context.handleEventsTimeout(timeout)
 
+    def _assert_valid_usb_context(self):
+        if self.context is None:
+            self.context = usb1.USBContext()
+
 
 class GDeviceRegistry(object):
     """Enumerates the available G-Devices"""
@@ -290,6 +301,13 @@ class GDeviceRegistry(object):
                 found_devices.append(known_device)
 
         return found_devices
+
+    def get_device(self, short_name_filter=None):
+        found_devices = self.find_devices()
+        for found_device in found_devices:
+            if found_device.device_name_short == short_name_filter:
+                return found_device
+        return None
 
 
 class GDevice(object):
@@ -381,7 +399,7 @@ class GDevice(object):
                 self.backend.handle_events()
                 if max_iter == 0:
                     self._log("Did not get a interrupt response in time")
-                    yield # hack ... works but why?
+                    # yield # hack ... works but why?
                     return
 
     def send_data(self, data):
@@ -443,8 +461,6 @@ class GDevice(object):
             return False
 
         return True
-
-
 
 
 class G203(GDevice):
@@ -530,106 +546,251 @@ class G213(GDevice):
         self.cmd_cycle   = "11ff0c3a0003ffffff0000{}64000000000000"
 
 
-class GlightService(object):
+class GlightCommon(object):
+
+    ARRAY_DELIM = ","
+
+    def get_bus(self):
+        return SystemBus()
+        # return SessionBus()
+
+    def list_devices(self):
+        pass
+
+    def set_color_at(self, device, color, slot):
+        pass
+
+    def set_colors(self, device, colors):
+        pass
+
+    def set_breathe(self, device, color, speed):
+        pass
+
+    def set_cycle(self, device, speed):
+        pass
+
+    def echo(self, s):
+        pass
+
+    def quit(self):
+        pass
+
+
+class GlightService(GlightCommon):
     """
       <node>
-        <interface name='net.lew21.pydbus.ClientServerExample'>
-          <method name='EchoString'>
-            <arg type='s' name='a' direction='in'/>
-            <arg type='s' name='response' direction='out'/>
+        <interface name='de.sgdw.linux.glight'>
+          <method name='list_devices'>
+            <arg type='as' name='resp'  direction='out'/>
           </method>
-          <method name='Quit'/>
-          <property name="SomeProperty" type="s" access="readwrite">
-            <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
-          </property>
+          <method name='set_color_at'>
+            <arg type='s' name='device' direction='in'/>
+            <arg type='s' name='color'  direction='in'/>
+            <arg type='q' name='slot'   direction='in'/>
+          </method>
+          <method name='set_colors'>
+            <arg type='s'  name='device' direction='in'/>
+            <arg type='as' name='colors' direction='in'/>
+          </method>
+          <method name='set_breathe'>
+            <arg type='s' name='device' direction='in'/>
+            <arg type='s' name='color'  direction='in'/>
+            <arg type='x' name='speed'  direction='in'/>
+          </method>
+          <method name='set_cycle'>
+            <arg type='s' name='device' direction='in'/>
+            <arg type='x' name='speed'  direction='in'/>
+          </method>
+          <method name='echo'>
+            <arg type='x' name='s' direction='in'/>
+          </method>
+          <method name='quit'/>
         </interface>
       </node>
     """
 
     # see: https://github.com/LEW21/pydbus/blob/master/doc/tutorial.rst
 
-    PropertiesChanged = signal()
-
-    bus_name = "net.lew21.pydbus.ClientServerExample"
+    bus_name = "de.sgdw.linux.glight"
     bus_path = "/" + bus_name.replace(".", "/")
 
     def __init__(self):
         """"""
-        self._someProperty = "initial value"
         self.loop = None
+        self.bus  = None
+        self.lock = Semaphore()
+
+        self.gdev_reg = None # type: GDeviceRegistry
+
+        self.init_backend()
 
     def run(self):
         """"""
         self.loop = GLib.MainLoop()
 
-        bus = SessionBus()
-        bus.publish(self.bus_name, self)
+        self.bus = self.get_bus()
+        self.bus.publish(self.bus_name, self)
 
         self.loop.run()
 
-    # Implementation below
-    def EchoString(self, s):
+    def init_backend(self):
+        self.gdev_reg = GDeviceRegistry()
+
+    def open_device(self, device_name):
+        self.lock.acquire()
+        device = self.gdev_reg.get_device(short_name_filter=device_name) # type: GDevice
+        if device is not None:
+            device.connect()
+        return device
+
+    def close_device(self, device):
+        """
+        :param device: GDevice
+        :return:
+        """
+        if device is not None:
+            device.disconnect()
+
+        self.lock.release()
+
+    def list_devices(self):
+        devices = list(map((lambda d: d.device_name_short), self.gdev_reg.find_devices()))
+        print("list_devices() := {}".format(devices))
+        self.lock.release()
+        return devices
+
+    def set_color_at(self, device_name, color, slot):
+        device = self.open_device(device_name)
+        try:
+            if device is not None:
+                print("set_color_at('{}', '{}', {})".format(device_name, color, slot))
+                device.send_color_command(color, slot)
+            else:
+                print("Device '{}' not found".format(device_name))
+        finally:
+            self.close_device(device)
+
+    def set_colors(self, device_name, colors):
+        device = self.open_device(device_name)
+        try:
+            if device is not None:
+                print("set_colors('{}', {})".format(device_name, colors))
+                device.send_colors_command(colors)
+            else:
+                print("Device '{}' not found".format(device_name))
+        finally:
+            self.close_device(device)
+
+    def set_breathe(self, device_name, color, speed):
+        device = self.open_device(device_name)
+        try:
+            if device is not None:
+                print("set_breathe('{}', '{}', {})".format(device_name, color, speed))
+                device.send_breathe_command(color, speed)
+            else:
+                print("Device '{}' not found".format(device_name))
+        finally:
+            self.close_device(device)
+
+    def set_cycle(self, device_name, speed):
+        device = self.open_device(device_name)
+        try:
+            if device is not None:
+                print("set_cycle('{}', {})".format(device_name, speed))
+                device.send_cycle_command(speed)
+            else:
+                print("Device '{}' not found".format(device_name))
+        finally:
+            self.close_device(device)
+
+    def echo(self, s):
         """returns whatever is passed to it"""
-        print("EchoString('{}')".format(s))
+        self.lock.acquire()
+        print("echo('{}')".format(s))
+        self.lock.release()
         return s
 
-    def Quit(self):
+    def quit(self):
         """removes this object from the DBUS connection and exits"""
-        print("Quit()")
+        self.lock.acquire()
         if self.loop is not None:
             self.loop.quit()
-
-    @property
-    def SomeProperty(self):
-        return self._someProperty
-
-    @SomeProperty.setter
-    def SomeProperty(self, value):
-        self._someProperty = value
-        self.PropertiesChanged(self.bus_name, {"SomeProperty": self.SomeProperty}, [])
+        self.lock.release()
 
 
-class GlightClient(object):
+class GlightClient(GlightCommon):
 
     def __init__(self):
         """"""
+        self.loop = None
+        self.bus  = None
+        self.proxy = None # type: GlightCommon
 
-        self.loop = None;
+    def connect(self):
+        self.bus = self.get_bus()
+        self.proxy = self.bus.get(GlightService.bus_name)
+
+    def start_loop(self):
+        if self.loop is None:
+            self.loop = GLib.MainLoop()
+        self.loop.run()
+
+    def stop_loop(self):
+        if self.loop is not None:
+            self.loop.quit()
+
+    def list_devices(self):
+        return self.proxy.list_devices()
+
+    def set_color_at(self, device, color, slot):
+        self.proxy.set_color_at(device, color, slot)
+
+    def set_colors(self, device, colors):
+        # self.proxy.set_colors(self.ARRAY_DELIM.join(colors))
+        self.proxy.set_colors(device, colors)
+        pass
+
+    def set_breathe(self, device, color, speed):
+        self.proxy.set_breathe(device, color, speed)
+
+    def set_cycle(self, device, speed):
+        self.proxy.set_cycle(device, speed)
+
+    def subscribe(self, dbus_filter, callback):
+        """
+        :param dbus_filter:
+        :param callback:
+        :return:
+
+            on_signal_emission(self, *args) -> Data str(args[4][0])
+        """
+        self.bus.subscribe(object=dbus_filter, signal_fired=callback)
 
     def do(self):
 
         print(GlightService.bus_name)
         print(GlightService.bus_path)
 
-        # get the session bus
-        bus = SessionBus()
+        device = "g213"
 
-        self.loop = GLib.MainLoop()
+        print('CALL self.list_devices()')
+        print(self.list_devices())
 
-        # get the object
-        the_object = bus.get(GlightService.bus_name)
+        print('CALL self.set_color_at("FFEEDD", 5)')
+        print(self.set_color_at(device, "FFEEDD", 5))
 
-        reply = the_object.EchoString("test 123")
-        print(reply)
+        print('CALL self.set_colors(["DEADBE", "4FDEAD"])')
+        print(self.set_colors(device, ["DEADBE", "4FDEAD"]))
 
-        dbus_filter = GlightService.bus_path
-        bus.subscribe(object=dbus_filter, signal_fired=self.on_signal_emission)
+        print('CALL self.set_breathe("CCDDEE", 2000)')
+        print(self.set_breathe(device, "CCDDEE", 2000))
 
-        the_object.SomeProperty = "Mae was here"
+        print('CALL self.set_cycle(4000)')
+        print(self.set_cycle(device, 4000))
 
-        # the_object.Quit()
+        print('CALL self.set_color_at("ddeeff", 0)')
+        print(self.set_color_at(device, "ddeeff", 0))
 
-        self.loop.run()
-
-    def on_signal_emission(self, *args):
-        """
-        Callback on emitting signal from server
-        """
-        print("Message: ", args)
-        print("Data: ", str(args[4][0]))
-
-        if self.loop is not None:
-            self.loop.quit()
 
 class GlightApp(object):
 
@@ -710,6 +871,7 @@ class GlightApp(object):
 
             elif experiment == 'dbus-client':
                 client = GlightClient()
+                client.connect()
                 client.do()
 
             else:
