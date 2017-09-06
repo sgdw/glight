@@ -12,9 +12,10 @@ if [ ! "$cmd" == "--install" ]; then
     exit
 fi
 
+# ------------------------------------------------------------------------------
 echo Install dbus profile
 cp etc-dbus-1/de.sgdw.linux.glight.conf /etc/dbus-1/de.sgdw.linux.glight.conf
-
+# ------------------------------------------------------------------------------
 echo Install init script
 src=etc-init.d/glight
 target=/etc/init.d/glight
@@ -22,6 +23,7 @@ cp "$src" "$target"
 chown root:root "$target"
 chmod 755 "$target"
 
+# ------------------------------------------------------------------------------
 echo Install lib
 src=
 target=/usr/local/lib/glight
@@ -37,23 +39,24 @@ cp "$src" "$target"
 chown root:root "$target"
 chmod 755 "$target"
 
+# ------------------------------------------------------------------------------
 echo Install runlevel
 src=../init.d/glight
-
+# ----------------------------
 echo Setup runlevel 5
 cd /etc/rc5.d
 target=S08glight
 if [ ! -f "$target" ]; then
     ln -s "$src" "$target"
 fi
-
+# ----------------------------
 echo Setup runlevel 0
 cd /etc/rc0.d
 target=K01glight
 if [ ! -f "$target" ]; then
     ln -s "$src" "$target"
 fi
-
+# ----------------------------
 echo Setup runlevel 6
 cd /etc/rc6.d
 target=K01glight
@@ -61,4 +64,8 @@ if [ ! -f "$target" ]; then
     ln -s "$src" "$target"
 fi
 
+# ------------------------------------------------------------------------------
+echo Restart service
 /etc/init.d/glight restart
+# ------------------------------------------------------------------------------
+echo Done
