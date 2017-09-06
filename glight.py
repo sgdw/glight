@@ -1065,7 +1065,7 @@ class GlightClient(GlightCommon):
         return num_val
 
     def load_state(self):
-        self.proxy.save_state()
+        self.proxy.load_state()
 
     def save_state(self):
         self.proxy.save_state()
@@ -1083,7 +1083,7 @@ class GlightClient(GlightCommon):
         pass
 
     def set_breathe(self, device, color, speed, brightness):
-        self._log("Setting breathe at device '{}' to color:'{}' speed:{} brightness:{}".format(device, speed, brightness))
+        self._log("Setting breathe at device '{}' to color:'{}' speed:{} brightness:{}".format(device, color, speed, brightness))
         self.proxy.set_breathe(
             device,
             color,
@@ -1237,7 +1237,7 @@ class GlightApp(object):
             if args.breathe is not None:
                 client.set_breathe(
                     device=args.device,
-                    color_hex=GlightApp.get_val_at(args.breathe, 0),
+                    color=GlightApp.get_val_at(args.breathe, 0),
                     speed=GlightApp.get_num_at(args.breathe, 1),
                     brightness=GlightApp.get_num_at(args.breathe, 2))
 

@@ -29,3 +29,8 @@ https://stackoverflow.com/questions/38779019/python-libusb1-asynchronous-transfe
 
 https://dbus.freedesktop.org/doc/dbus-specification.html#basic-types
 https://stackoverflow.com/questions/11170118/dbus-systembus-policies
+
+Somebody trying to decode the G-Protocoll:
+https://github.com/GSeriesDev/gseries-tools/issues/3
+https://github.com/cvuchener/g500/tree/master/src
+https://github.com/cvuchener/g500

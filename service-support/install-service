@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
 
+cmd=$1
+
+if [ "$cmd" == "" ]; then
+    echo "Use '$0 --install' to actually install the service"
+    exit
+fi
+
+if [ ! "$cmd" == "--install" ]; then
+    echo "Unknown command '$cmd'"
+    exit
+fi
+
 echo Install dbus profile
 cp etc-dbus-1/de.sgdw.linux.glight.conf /etc/dbus-1/de.sgdw.linux.glight.conf
 
@@ -48,3 +60,5 @@ target=K01glight
 if [ ! -f "$target" ]; then
     ln -s "$src" "$target"
 fi
+
+/etc/init.d/glight restart
