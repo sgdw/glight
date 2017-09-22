@@ -120,12 +120,12 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="btn_restore_settings">
-                <property name="label" translatable="yes">Restore state from defaults</property>
+              <object class="GtkButton" id="btn_store_settings">
+                <property name="label" translatable="yes">Save state as default</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
-                <signal name="clicked" handler="on_restore_settings" swapped="no"/>
+                <signal name="clicked" handler="on_store_settings" swapped="no"/>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -134,12 +134,12 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="btn_store_settings">
-                <property name="label" translatable="yes">Save state as default</property>
+              <object class="GtkButton" id="btn_restore_settings">
+                <property name="label" translatable="yes">Restore state from defaults</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
-                <signal name="clicked" handler="on_store_settings" swapped="no"/>
+                <signal name="clicked" handler="on_restore_settings" swapped="no"/>
               </object>
               <packing>
                 <property name="expand">False</property>

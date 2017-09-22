@@ -45,6 +45,10 @@ class GlightUi:
 
     def init_ui(self):
         self.builder.add_from_file(self.gladefile)
+
+        self.window = self.builder.get_object("window")
+        self.window.set_title("GLight-UI")
+
         self.device_store = self.builder.get_object("devices")  # type: ListStore
         self.device_tree = self.builder.get_object("device_tree")
 
@@ -68,7 +72,6 @@ class GlightUi:
 
         self.sync_ui()
 
-        self.window = self.builder.get_object("window")
         self.builder.connect_signals(self)
         self.window.show()
 
