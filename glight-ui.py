@@ -53,7 +53,9 @@ class GlightUi:
         self.device_tree = self.builder.get_object("device_tree")
 
         self.btn_color_complete = self.builder.get_object("btn_color_complete")
+        self.btn_color_complete.set_rgba(self.get_rgba_from_hex("ffffff"))
         self.btn_color_breathe = self.builder.get_object("btn_color_breathe")
+        self.btn_color_breathe.set_rgba(self.get_rgba_from_hex("ffffff"))
 
         self.btn_set = {}
         self.lbl_not_supported = {}
@@ -127,7 +129,6 @@ class GlightUi:
             if self.selected_device in self.device_states:
                 state = self.device_states[self.selected_device] # type: glight.GDeviceState
 
-                #for i, color in enumerate(state.colors):
                 for i in range(0, len(self.btn_color_field)+1):
                     if len(state.colors) > i:
                         color = state.colors[i]
@@ -138,9 +139,22 @@ class GlightUi:
 
                     if i == 0:
                         self.btn_color_complete.set_rgba(c)
+                        self.btn_color_breathe.set_rgba(c)
                     else:
                         if len(self.btn_color_field) > i-1:
                             self.btn_color_field[i-1].set_rgba(c)
+
+                if state.speed is not None:
+                    if state.breathing:
+                        self.adj_speed_breathe.set_value(state.speed)
+                    elif state.cycling:
+                        self.adj_speed_cycle.set_value(state.speed)
+
+                if state.brightness is not None:
+                    if state.breathing:
+                        self.adj_brightness_breathe.set_value(state.brightness)
+                    elif state.cycling:
+                        self.adj_brightness_cycle.set_value(state.brightness)
 
 
     def get_rgba_from_hex(self, col_hex):
