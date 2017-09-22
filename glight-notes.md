@@ -34,3 +34,4 @@ Somebody trying to decode the G-Protocoll:
 https://github.com/GSeriesDev/gseries-tools/issues/3
 https://github.com/cvuchener/g500/tree/master/src
 https://github.com/cvuchener/g500
+https://github.com/cvuchener/hidpp

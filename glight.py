@@ -61,9 +61,27 @@ default_time = 1000
 
 # Note to self: /usr/lib/python2.7/dist-packages/
 
+class ColorUtils(object):
+
+    @staticmethod
+    def transition(value, maximum, start_point, end_point):
+        return start_point + (end_point - start_point) * value / maximum
+
+    @staticmethod
+    def transition3(value, maximum, (s1, s2, s3), (e1, e2, e3)):
+        r1 = ColorUtils.transition(value, maximum, s1, e1)
+        r2 = ColorUtils.transition(value, maximum, s2, e2)
+        r3 = ColorUtils.transition(value, maximum, s3, e3)
+        return r1, r2, r3
+
+    # import colorsys
+    # rgb_triplet_to_display= hsv_to_rgb(transition3(value, maximum, start_triplet, end_triplet))
+
+
 class UsbConstants(object):
     HID_REQ_SET_REPORT=0x09
 
+# USB Backends ----------------------------------------------------------------
 
 class UsbBackend(object):
 
@@ -278,6 +296,7 @@ class UsbBackendUsb1(UsbBackend):
         if self.context is None:
             self.context = usb1.USBContext()
 
+# GDevices --------------------------------------------------------------------
 
 class GDeviceRegistry(object):
     """Enumerates the available G-Devices"""
@@ -316,6 +335,12 @@ class GDeviceRegistry(object):
                 return found_device
         return None
 
+    def get_known_device(self, short_name_filter=None):
+        for known_device in self.known_devices:
+            if known_device.device_name_short == short_name_filter:
+                return known_device
+        return None
+
     def get_state_of_devices(self):
         states = {}
         for known_device in self.known_devices:
@@ -339,14 +364,7 @@ class GDeviceRegistry(object):
                 if self.verbose:
                     print(traceback.format_exc())
 
-    def load_state_of_devices(self, filename):
-        """"""
-        state = self.get_state_of_devices()
-
-        fh = open(filename, "r")
-        state_json = fh.read()
-        fh.close()
-
+    def load_state_from_json(self, state_json):
         state_data = json.loads(state_json)
         for known_device in self.known_devices:
             device_name = known_device.device_name_short
@@ -359,15 +377,28 @@ class GDeviceRegistry(object):
                     if self.verbose:
                         print(traceback.format_exc())
 
+
+    def load_state_of_devices(self, filename):
+        """"""
+        state = self.get_state_of_devices()
+
+        fh = open(filename, "r")
+        state_json = fh.read()
+        fh.close()
+
+        self.load_state_from_json(state_json)
+
     def write_state_of_devices(self, filename):
         """"""
         self._assert_valid_state_filename(filename)
-        state = self.get_state_of_devices()
-        state_json = json.dumps(state, indent=4)
+        state_json = self.get_state_as_json()
 
         fh = open(filename, "w")
         fh.write(state_json)
         fh.close()
+
+    def get_state_as_json(self):
+        return json.dumps(self.get_state_of_devices(), indent=4)
 
     def _assert_valid_state_filename(self, filename):
         if self.strict_filenames:
@@ -379,21 +410,27 @@ class GDeviceState(object):
 
     def __init__(self):
         """"""
-        self.attrs = ["colors", "static", "breathing", "cycling", "brightness", "speed"]
+        self.attrs = ["colors", "colors_uniform", "static", "breathing", "cycling", "brightness", "speed"]
         self.colors = None
+        self.colors_uniform = False
         self.static = False
         self.breathing = False
         self.cycling = False
         self.brightness = None
         self.speed = None
 
-    def reset(self):
-        self.colors = None
+    def reset(self, clear_colors=False):
+        if clear_colors:
+            self.colors = None
+        self.colors_uniform = False
         self.static = False
         self.breathing = False
         self.cycling = False
         self.brightness = None
         self.speed = None
+
+    def reset_colors(self, keep_colors=False):
+        self.colors = None
 
     def resize_colors(self, size):
         if self.colors is None:
@@ -406,6 +443,7 @@ class GDeviceState(object):
         return clrs_len
 
     def set_color_at(self, color, index=0):
+        print "sca({0}, {1})".format(color, index)
         self.resize_colors(index+1)
         self.colors[index] = color
 
@@ -415,11 +453,14 @@ class GDeviceState(object):
             if attr in values:
                 self.__setattr__(attr, values[attr])
 
+        return self
+
     def as_dict(self):
         data = {}
         for attr in self.attrs:
             data[attr] = self.__getattribute__(attr)
         return data
+
 
 class GValueSpec(object):
 
@@ -448,6 +489,10 @@ class GValueSpec(object):
 
 
 class GDeviceException(Exception):
+    """"""
+
+
+class GControllerException(Exception):
     """"""
 
 
@@ -523,9 +568,12 @@ class GDevice(object):
                     if self.device_state.static and self.device_state.colors is not None:
                         self.connect()
                         try:
-                            for i, color in enumerate(self.device_state.colors):
-                                if color is not None:
-                                    self.send_color_command(color, i)
+                            if self.device_state.colors_uniform and len(self.device_state.colors) > 0:
+                                self.send_color_command(self.device_state.colors[0], 0)
+                            else:
+                                for i, color in enumerate(self.device_state.colors):
+                                    if color is not None:
+                                        self.send_color_command(color, i)
                         finally:
                             self.disconnect()
 
@@ -613,27 +661,28 @@ class GDevice(object):
             for i in range(0, min(len(colors), self.max_color_fields)):
                 self.send_color_command(colors[i], i + 1)
 
-    def send_color_command(self, color_hex, field=0):
-        GDevice.assert_valid_color(color_hex)
-        self._log("Set color '{}' at slot {}".format(color_hex, field))
+    def send_color_command(self, color, field=0):
+        GDevice.assert_valid_color(color)
+        self._log("Set color '{}' at slot {}".format(color, field))
         self.send_data(self.cmd_color.format(
                             field=self.field_spec.format_num(field),
-                            color=self.color_spec.format_color_hex(color_hex)))
+                            color=self.color_spec.format_color_hex(color)))
 
         self.device_state.reset()
         self.device_state.static = True
-        self.device_state.set_color_at(color_hex, field)
+        self.device_state.colors_uniform = (field == 0)
+        self.device_state.set_color_at(color, field)
 
-    def send_breathe_command(self, color_hex, speed, brightness=None):
+    def send_breathe_command(self, color, speed, brightness=None):
         if not self.can_breathe:
             raise GDeviceException("Device does not support the breathe effect")
 
         if brightness is None:
             brightness = self.bright_spec.max_value
-        GDevice.assert_valid_color(color_hex)
+        GDevice.assert_valid_color(color)
 
         self.send_data(self.cmd_breathe.format(
-                            color=self.color_spec.format_color_hex(color_hex),
+                            color=self.color_spec.format_color_hex(color),
                             speed=self.speed_spec.format_num(speed),
                             bright=self.bright_spec.format_num(brightness)))
 
@@ -641,7 +690,7 @@ class GDevice(object):
         self.device_state.breathing = True
         self.device_state.speed = speed
         self.device_state.brightness = brightness
-        self.device_state.set_color_at(color_hex)
+        self.device_state.set_color_at(color)
 
     def send_cycle_command(self, speed, brightness=None):
         if not self.can_cycle:
@@ -664,9 +713,9 @@ class GDevice(object):
             print(msg)
 
     @staticmethod
-    def assert_valid_color(color_hex):
-        if not GDevice.is_valid_color(color_hex):
-            raise ValueError("Color '{}' is not a valid color string in hex representation (e.g. 'F0D3AA')".format(color_hex))
+    def assert_valid_color(color):
+        if not GDevice.is_valid_color(color):
+            raise ValueError("Color '{}' is not a valid color string in hex representation (e.g. 'F0D3AA')".format(color))
 
     @staticmethod
     def is_valid_color(data):
@@ -794,53 +843,225 @@ class G213(GDevice):
         #                                         |   brightness
         #                                         speed
 
+# GServices and GClients ------------------------------------------------------
 
 class GlightCommon(object):
-
-    ARRAY_DELIM = ","
 
     def get_bus(self):
         return SystemBus()
         # return SessionBus()
 
-    def load_state(self):
+    def load_state(self, filename = None):
         pass
 
-    def save_state(self):
+    def save_state(self, filename = None):
+        pass
+
+    def get_state(self):
         pass
 
     def list_devices(self):
         pass
 
-    def set_color_at(self, device, color, field):
+    def set_color_at(self, device, color, field = 0):
         pass
 
     def set_colors(self, device, colors):
         pass
 
-    def set_breathe(self, device, color, speed, brightness):
+    def set_breathe(self, device, color, speed = None, brightness = None):
         pass
 
-    def set_cycle(self, device, speed, brightness):
-        pass
-
-    def echo(self, s):
+    def set_cycle(self, device, speed, brightness = None):
         pass
 
     def quit(self):
         pass
 
 
-class GlightService(GlightCommon):
+class GlightRemoteCommon(object):
+
+    ARRAY_DELIM = ","
+
+    def get_bus(self):
+        return SystemBus()
+
+
+class GlightController(GlightCommon):
+    """"""
+
+    BACKEND_LOCAL = 0
+    BACKEND_DBUS = 1
+
+    def __init__(self, backend_type, verbose=False):
+        """"""
+        self.verbose = verbose
+        self.backend_type = backend_type
+        self.client = None  # type: GlightClient
+        self.device_registry = None  # type: GDeviceRegistry
+        self.init_backend()
+
+    def init_backend(self):
+        if self.is_con_local:
+            self.device_registry = GDeviceRegistry()
+        elif self.is_con_dbus:
+            self.client = GlightClient()
+            self.client.connect()
+
+    @property
+    def is_con_local(self):
+        return self.backend_type == self.BACKEND_LOCAL
+
+    @property
+    def is_con_dbus(self):
+        return self.backend_type == self.BACKEND_DBUS
+
+    def _assert_supported_backend(self):
+        if not (self.is_con_local or self.is_con_dbus):
+            raise GControllerException("Unsupported backend '{}'".format(self.backend_type))
+
+    def _assert_device_is_found(self, device_name, device):
+        if device is None:
+            raise GControllerException("Could not find device '{}'".format(device_name))
+
+    def get_device(self, device_name):
+        """
+        :param device_name: str
+        :return: GDevice
+        """
+        self._assert_supported_backend()
+        if self.is_con_local:
+            return self.device_registry.get_device(short_name_filter=device_name)
+        return None
+
+    def list_devices(self):
+        self._assert_supported_backend()
+        device_list = {}
+        if self.is_con_local:
+            devices = self.device_registry.find_devices()
+        elif self.is_con_dbus:
+            devices = self.client.list_devices()
+
+        for device_name_short, device_name in devices.iteritems():
+            device_list[device_name_short] = device_name
+
+        return device_list
+
+    def save_state(self, filename=None):
+        self._assert_supported_backend()
+        if self.is_con_local:
+            self.device_registry.write_state_of_devices(filename)
+        elif self.is_con_dbus:
+            self.client.save_state()
+
+    def load_state(self, filename=None):
+        self._assert_supported_backend()
+        if self.is_con_local:
+            self.device_registry.load_state_of_devices(filename)
+            self.device_registry.restore_states_of_devices()
+        elif self.is_con_dbus:
+            self.client.load_state()
+
+    def get_state(self):
+        self._assert_supported_backend()
+        states = {}
+        if self.is_con_local:
+            for known_device in self.device_registry.known_devices:
+                states[known_device.device_name_short] = GDeviceState().import_dict(known_device.device_state.as_dict())
+        elif self.is_con_dbus:
+            state_json = self.client.get_state()
+            print state_json
+            state_data = json.loads(state_json)
+
+            devices = self.list_devices()
+            for device_name_short, device_name in devices.iteritems():
+                if device_name_short in state_data:
+                    try:
+                        states[device_name_short] = GDeviceState().import_dict(state_data[device_name_short])
+                    except Exception as ex:
+                        print("Could not load state of device '{}'".format(device_name_short))
+                        print("Exception: {}".format(ex))
+                        if self.verbose:
+                            print(traceback.format_exc())
+
+        return states
+
+    def set_cycle(self, device_name, speed, brightness=None):
+        self._assert_supported_backend()
+        if self.is_con_local:
+            device = self.get_device(device_name) # type: GDevice
+            self._assert_device_is_found(device_name, device)
+            device.connect()
+            try:
+                device.send_cycle_command(speed, brightness)
+            finally:
+                device.disconnect()
+        elif self.is_con_dbus:
+            self.client.set_cycle(device_name, speed, brightness)
+
+    def set_color_at(self, device_name, color, field=0):
+        self._assert_supported_backend()
+        if self.is_con_local:
+            device = self.get_device(device_name) # type: GDevice
+            self._assert_device_is_found(device_name, device)
+            device.connect()
+            try:
+                device.send_color_command(color, field)
+            finally:
+                device.disconnect()
+        elif self.is_con_dbus:
+            self.client.set_color_at(device_name, color, field)
+
+    def set_breathe(self, device_name, color, speed=None, brightness=None):
+        self._assert_supported_backend()
+        if self.is_con_local:
+            device = self.get_device(device_name) # type: GDevice
+            self._assert_device_is_found(device_name, device)
+            device.connect()
+            try:
+                device.send_breathe_command(color, speed, brightness)
+            finally:
+                device.disconnect()
+        elif self.is_con_dbus:
+            self.client.set_breathe(device_name, color, speed, brightness)
+
+    def set_colors(self, device_name, colors):
+        self._assert_supported_backend()
+        if self.is_con_local:
+            device = self.get_device(device_name) # type: GDevice
+            self._assert_device_is_found(device_name, device)
+            device.connect()
+            try:
+                device.send_colors_command(colors)
+            finally:
+                device.disconnect()
+        elif self.is_con_dbus:
+            self.client.set_colors(device_name, colors)
+
+            if self.verbose:
+                print json.dumps(self.client.get_state())
+
+    def quit(self):
+        self._assert_supported_backend()
+        if self.is_con_local:
+            raise GControllerException("Quit is not supported locally")
+        elif self.is_con_dbus:
+            self.client.quit()
+
+
+class GlightService(GlightRemoteCommon):
     """
       <node>
         <interface name='de.sgdw.linux.glight'>
           <method name='list_devices'>
-            <arg type='as' name='resp'  direction='out'/>
+            <arg type='a{ss}' name='resp'  direction='out'/>
           </method>
           <method name='load_state'>
           </method>
           <method name='save_state'>
+          </method>
+          <method name='get_state'>
+            <arg type='s' name='resp'  direction='out'/>
           </method>
           <method name='set_color_at'>
             <arg type='s' name='device' direction='in'/>
@@ -870,6 +1091,7 @@ class GlightService(GlightCommon):
       </node>
     """
 
+    # see: https://dbus.freedesktop.org/doc/dbus-specification.html
     # see: https://github.com/LEW21/pydbus/blob/master/doc/tutorial.rst
 
     bus_name = "de.sgdw.linux.glight"
@@ -928,7 +1150,7 @@ class GlightService(GlightCommon):
         return num_val
 
     # Public
-    def load_state(self):
+    def load_state(self, filename = None):
         if self.state_file is not None:
             try:
                 self.device_registry.load_state_of_devices(self.state_file)
@@ -940,7 +1162,7 @@ class GlightService(GlightCommon):
                     print(traceback.format_exc())
 
     # Public
-    def save_state(self):
+    def save_state(self, filename = None):
         if self.state_file is not None:
             try:
                 self.device_registry.write_state_of_devices(self.state_file)
@@ -954,8 +1176,14 @@ class GlightService(GlightCommon):
             raise GDeviceException("No state file configured")
 
     # Public
+    def get_state(self):
+        return self.device_registry.get_state_as_json()
+
+    # Public
     def list_devices(self):
-        devices = list(map((lambda d: d.device_name_short), self.device_registry.find_devices()))
+        devices = {}
+        for device in self.device_registry.find_devices():
+            devices[device.device_name_short] = device.device_name
         print("list_devices() := {}".format(devices))
         self.lock.release()
         return devices
@@ -991,7 +1219,7 @@ class GlightService(GlightCommon):
             if device is not None:
                 print("set_breathe('{}', '{}', {}, {})".format(device_name, color, speed, brightness))
                 device.send_breathe_command(
-                    color_hex=color,
+                    color=color,
                     speed=self.unmarshall_num_par(speed),
                     brightness=self.unmarshall_num_par(brightness))
             else:
@@ -1030,14 +1258,14 @@ class GlightService(GlightCommon):
         self.lock.release()
 
 
-class GlightClient(GlightCommon):
+class GlightClient(GlightRemoteCommon):
 
     def __init__(self, verbose=False):
         """"""
         self.verbose=verbose
         self.loop = None
         self.bus  = None
-        self.proxy = None # type: GlightCommon
+        self.proxy = None # type: GlightRemoteCommon
 
     def connect(self):
         self.bus = self.get_bus()
@@ -1063,6 +1291,9 @@ class GlightClient(GlightCommon):
 
     def save_state(self):
         self.proxy.save_state()
+
+    def get_state(self):
+        return self.proxy.get_state()
 
     def list_devices(self):
         return self.proxy.list_devices()
@@ -1090,6 +1321,9 @@ class GlightClient(GlightCommon):
             device,
             self.marshall_num_par(speed),
             self.marshall_num_par(brightness))
+
+    def echo(self, s):
+        return self.proxy.echo(s)
 
     def _log(self, msg):
         if self.verbose:
@@ -1130,6 +1364,7 @@ class GlightClient(GlightCommon):
         print('CALL self.set_color_at("ddeeff", 0)')
         print(self.set_color_at(device, "ddeeff", 0))
 
+# App handling ----------------------------------------------------------------
 
 class GlightApp(object):
 
@@ -1196,132 +1431,93 @@ class GlightApp(object):
         if args.experimental is not None:
             GlightApp.handle_experimental_features(args=args, verbose=args.verbose)
         else:
-            if args.service or args.client:
-                GlightApp.handle_client_service(args=args, verbose=args.verbose)
-            else:
-                GlightApp.handle_device_control(args=args, verbose=args.verbose)
+            GlightApp.handle(args=args, verbose=args.verbose)
+            # if args.service or args.client:
+            #     GlightApp.handle_client_service(args=args, verbose=args.verbose)
+            # else:
+            #     GlightApp.handle_device_control(args=args, verbose=args.verbose)
+
+        return args
 
     @staticmethod
-    def handle_client_service(args, verbose=False):
+    def handle(args, verbose=False):
         """"""
-
         if args.service:
             srv = GlightService(state_file=args.state_file, verbose=verbose)
             srv.run()
             sys.exit(0) # Ends here
 
-        elif args.client:
-            client = GlightClient(verbose=verbose)
-            client.connect()
+        else:
+            backend_type = GlightController.BACKEND_LOCAL
+            if args.client:
+                backend_type = GlightController.BACKEND_DBUS
+            client = GlightController(backend_type, verbose=verbose)
+
+            # Saving state
+            if args.load_state:
+                if verbose:
+                    if args.state_file is None:
+                        print("Loading state remotely")
+                    else:
+                        print("Loading state from {}".format(args.state_file))
+                client.load_state(args.state_file)
 
             # Listing devices
             if args.do_list:
                 devices = client.list_devices()
                 print("{} devices:".format(len(devices)))
-                for i, device in enumerate(devices):
-                    print("[{}] {}".format(i, device))
+                i = 0
+                for device_name_short, device_name in devices.iteritems():
+                    i = i + 1
+                    print("[{}] {} ({})".format(i, device_name, device_name_short))
 
             # Setting colors
             if args.colors is not None:
+                if verbose:
+                    print("Setting device {} colors to {}"
+                          .format(args.device, args.colors))
                 client.set_colors(
-                            device=args.device,
-                            colors=args.colors)
+                    device_name=args.device,
+                    colors=args.colors)
 
             # Setting breathing
             if args.breathe is not None:
+                color = GlightApp.get_val_at(args.breathe, 0)
+                speed = GlightApp.get_num_at(args.breathe, 1)
+                brightness = GlightApp.get_num_at(args.breathe, 2)
+
+                if verbose:
+                    print("Setting device {} breathe mode to color {}, speed {}, brightness {}"
+                          .format(args.device, color, speed, brightness))
+
                 client.set_breathe(
-                    device=args.device,
-                    color=GlightApp.get_val_at(args.breathe, 0),
-                    speed=GlightApp.get_num_at(args.breathe, 1),
-                    brightness=GlightApp.get_num_at(args.breathe, 2))
+                    device_name=args.device,
+                    color=color,
+                    speed=speed,
+                    brightness=brightness)
 
             # Setting cycle
             if args.cycle is not None:
+                speed = GlightApp.get_num_at(args.cycle, 0)
+                brightness = GlightApp.get_num_at(args.cycle, 1)
+
+                if verbose:
+                    print("Setting device {} cycle mode to speed {}, brightness {}"
+                          .format(args.device, speed, brightness))
+
                 client.set_cycle(
-                    device=args.device,
-                    speed=GlightApp.get_num_at(args.cycle, 0),
-                    brightness=GlightApp.get_num_at(args.cycle, 1))
+                    device_name=args.device,
+                    speed=speed,
+                    brightness=brightness)
 
             # Saving state
             if args.save_state:
-                if args.state_file is not None:
-                    print("Warning: parameter '--state-file' is not supported in client mode. State will be saved by the service.")
-                client.save_state()
-
-    @staticmethod
-    def handle_device_control(args, verbose=False):
-        """"""
-        backend_type = UsbBackend.TYPE_DEFAULT
-        if args.backend is not None:
-            backend_type = args.backend
-        if verbose:
-            print("Using backend '{}'".format(backend_type))
-
-        gdr = GDeviceRegistry(backend_type, verbose=verbose)
-        found_devices = gdr.find_devices()
-        device = None # type: GDevice
-
-        if args.load_state and args.state_file is not None:
-            gdr.load_state_of_devices(args.state_file)
-            gdr.restore_states_of_devices()
-
-        if args.do_list:
-            print("{} devices found:".format(len(found_devices)))
-            i = 0
-            for found_device in found_devices:
-                i = i + 1
-                print("[{}] {}".format(i, found_device.device_name))
-
-        if args.device is not None:
-            for found_device in found_devices:
-                if found_device.device_name_short == args.device:
-                    device = found_device
-                    break
-
-            if device is not None:
                 if verbose:
-                    print("Using device '{}' ({})".format(device.device_name, device.device_name_short))
-            else:
-                print("Device '{}' not found".format(args.device))
-
-        if device is not None:
-            device.verbose = verbose
-            device.backend.verbose = verbose
-            try:
-                if verbose:
-                    print("Connecting to device '{}'".format(device.device_name, device.backend.device))
-
-                # Start communicate to device ...
-                device.connect()
-
-                # Setting colors
-                if args.colors is not None:
-                    device.send_colors_command(args.colors)
-
-                # Setting breathing
-                if args.breathe is not None:
-                    device.send_breathe_command(
-                        color_hex  = GlightApp.get_val_at(args.breathe, 0),
-                        speed      = GlightApp.get_num_at(args.breathe, 1),
-                        brightness = GlightApp.get_num_at(args.breathe, 2))
-
-                # Setting cycle
-                if args.cycle is not None:
-                    device.send_cycle_command(
-                        speed      = GlightApp.get_num_at(args.cycle, 0),
-                        brightness = GlightApp.get_num_at(args.cycle, 1))
-
-            finally:
-                if verbose:
-                    print("Disconnecting from device '{}'".format(device.device_name))
-                device.disconnect()
-
-            # print("State:")
-            # print(gdr.get_state_of_devices())
-
-        if args.save_state and args.state_file is not None:
-            gdr.write_state_of_devices(args.state_file)
-
+                    if args.state_file is None:
+                        print("Saving state remotely")
+                    else:
+                        print("Saving state to {}".format(args.state_file))
+                client.save_state(args.state_file)
 
     @staticmethod
     def handle_experimental_features(args, verbose=False):
@@ -1337,6 +1533,13 @@ class GlightApp(object):
                 client.connect()
                 client.do()
 
+            elif experiment == 'devdev':
+                state = GDeviceState()
+                for i in range(1,6):
+                    state.set_color_at(chr(ord("a")+i), i)
+
+                print json.dumps(state.as_dict())
+
             else:
                 print("Unknown experimental feature '{}'".format(experiment))
                 sys.exit(2)
@@ -1349,11 +1552,13 @@ if __name__ == "__main__":
 
     try:
 
-        GlightApp.handle_args()
+        args = GlightApp.get_args()
+        GlightApp.handle_args(args=args)
 
     except Exception as ex:
         print("Exception: {}".format(ex))
-        print(traceback.format_exc())
+        if args.verbose:
+            print(traceback.format_exc())
         sys.exit(1)
     finally:
         pass
