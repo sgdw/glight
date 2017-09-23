@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
+
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
@@ -11,6 +13,8 @@ import glight
 class GlightUi:
 
     def __init__(self):
+        self.state_file_extension = "gstate"
+
         self.gladefile = "glight-ui.glade"
         self.builder = Gtk.Builder()
 
@@ -130,7 +134,7 @@ class GlightUi:
                 state = self.device_states[self.selected_device] # type: glight.GDeviceState
 
                 for i in range(0, len(self.btn_color_field)+1):
-                    if len(state.colors) > i:
+                    if state.colors is not None and len(state.colors) > i:
                         color = state.colors[i]
                     else:
                         color = "ffffff"
@@ -192,6 +196,78 @@ class GlightUi:
         state = self.proxy.get_state()
         print state
         self.proxy.load_state()
+
+    def on_load_state(self, widget):
+        # http://python-gtk-3-tutorial.readthedocs.io/en/latest/dialogs.html#filechooserdialog
+        dialog = Gtk.FileChooserDialog(
+            "Please choose a file",
+            self.window,
+            Gtk.FileChooserAction.OPEN,
+            (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OPEN, Gtk.ResponseType.OK))
+
+        dialog.set_current_folder(os.path.expanduser("~"))  # HACK
+
+        self.add_filters(dialog)
+
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            print("File selected: " + dialog.get_filename())
+
+            state_json = None
+            filename = dialog.get_filename()
+            with open(filename, "r") as state_file:
+                state_json = state_file.read()
+
+            if state_json is not None:
+                self.proxy.set_state(state_json)
+
+        elif response == Gtk.ResponseType.CANCEL:
+            print("Cancel clicked")
+
+        dialog.destroy()
+
+    def on_save_state(self, widget):
+        dialog = Gtk.FileChooserDialog(
+            "Please choose a file",
+            self.window,
+            Gtk.FileChooserAction.SAVE,
+            (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_SAVE, Gtk.ResponseType.OK))
+
+        dialog.set_current_folder(os.path.expanduser("~"))  # HACK
+
+        self.add_filters(dialog)
+
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            print("File selected: " + dialog.get_filename())
+
+            state = self.proxy.get_state()
+            state_json = self.proxy.convert_state_to_json(state)
+
+            filename = dialog.get_filename()
+
+            if not filename.endswith(".{0}".format(self.state_file_extension)):
+                filename = filename + "." + self.state_file_extension
+
+            with open(filename, "w") as state_file:
+                state_json = state_file.write(state_json)
+
+        elif response == Gtk.ResponseType.CANCEL:
+            print("Cancel clicked")
+
+        dialog.destroy()
+
+    def add_filters(self, dialog):
+        filter_text = Gtk.FileFilter()
+        filter_text.set_name("GLight state file")
+        filter_text.add_mime_type("text/plain")
+        filter_text.add_pattern("*.{0}".format(self.state_file_extension))
+        dialog.add_filter(filter_text)
+
+        filter_any = Gtk.FileFilter()
+        filter_any.set_name("Any files")
+        filter_any.add_pattern("*")
+        dialog.add_filter(filter_any)
 
     def on_device_selected(self, tree_selection):
         """"""

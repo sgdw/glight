@@ -61,23 +61,6 @@ default_time = 1000
 
 # Note to self: /usr/lib/python2.7/dist-packages/
 
-class ColorUtils(object):
-
-    @staticmethod
-    def transition(value, maximum, start_point, end_point):
-        return start_point + (end_point - start_point) * value / maximum
-
-    @staticmethod
-    def transition3(value, maximum, (s1, s2, s3), (e1, e2, e3)):
-        r1 = ColorUtils.transition(value, maximum, s1, e1)
-        r2 = ColorUtils.transition(value, maximum, s2, e2)
-        r3 = ColorUtils.transition(value, maximum, s3, e3)
-        return r1, r2, r3
-
-    # import colorsys
-    # rgb_triplet_to_display= hsv_to_rgb(transition3(value, maximum, start_triplet, end_triplet))
-
-
 class UsbConstants(object):
     HID_REQ_SET_REPORT=0x09
 
@@ -860,6 +843,9 @@ class GlightCommon(object):
     def get_state(self):
         pass
 
+    def set_state(self, state_json):
+        pass
+
     def list_devices(self):
         pass
 
@@ -962,7 +948,22 @@ class GlightController(GlightCommon):
         elif self.is_con_dbus:
             self.client.load_state()
 
+    def convert_state_to_json(self, state):
+        """
+        :param state: GDeviceState[]
+        :return: str
+        """
+
+        state_dict = {}
+        for device_name, device_state in state.iteritems():
+            state_dict[device_name] = device_state.as_dict()
+
+        return json.dumps(state_dict)
+
     def get_state(self):
+        """
+        :return: GDeviceState[]
+        """
         self._assert_supported_backend()
         states = {}
         if self.is_con_local:
@@ -985,6 +986,24 @@ class GlightController(GlightCommon):
                             print(traceback.format_exc())
 
         return states
+
+    def set_state(self, state):
+        self._assert_supported_backend()
+        if self.is_con_local:
+            if isinstance(state, list):
+                self.device_registry.set_state_of_devices(state)
+            elif isinstance(state, str):
+                self.device_registry.load_state_from_json(state)
+            else:
+                raise GControllerException("The method set_state only supports list of states or a JSON representation")
+        elif self.is_con_dbus:
+            if isinstance(state, list):
+                state_json = json.dumps(state)
+            elif isinstance(state, str):
+                state_json = state
+            else:
+                raise GControllerException("The method set_state only supports list of states or a JSON representation")
+            self.client.set_state(state_json)
 
     def set_cycle(self, device_name, speed, brightness=None):
         self._assert_supported_backend()
@@ -1062,6 +1081,9 @@ class GlightService(GlightRemoteCommon):
           </method>
           <method name='get_state'>
             <arg type='s' name='resp'  direction='out'/>
+          </method>
+          <method name='set_state'>
+            <arg type='s' name='state'  direction='in'/>
           </method>
           <method name='set_color_at'>
             <arg type='s' name='device' direction='in'/>
@@ -1180,6 +1202,19 @@ class GlightService(GlightRemoteCommon):
         return self.device_registry.get_state_as_json()
 
     # Public
+    def set_state(self, state_json):
+        try:
+            if self.verbose:
+                print("Set state '{}'".format(state_json))
+            self.device_registry.load_state_from_json(state_json)
+            self.device_registry.restore_states_of_devices()
+        except Exception as ex:
+            print("Failed to set state '{}'".format(ex.message))
+            if self.verbose:
+                print("Exception: {}".format(ex))
+                print(traceback.format_exc())
+
+    # Public
     def list_devices(self):
         devices = {}
         for device in self.device_registry.find_devices():
@@ -1294,6 +1329,9 @@ class GlightClient(GlightRemoteCommon):
 
     def get_state(self):
         return self.proxy.get_state()
+
+    def set_state(self, state_json):
+        return self.proxy.set_state(state_json)
 
     def list_devices(self):
         return self.proxy.list_devices()
