@@ -426,12 +426,10 @@ class GDeviceState(object):
         return clrs_len
 
     def set_color_at(self, color, index=0):
-        print "sca({0}, {1})".format(color, index)
         self.resize_colors(index+1)
         self.colors[index] = color
 
     def import_dict(self, values):
-        data = {}
         for attr in self.attrs:
             if attr in values:
                 self.__setattr__(attr, values[attr])
@@ -990,15 +988,21 @@ class GlightController(GlightCommon):
     def set_state(self, state):
         self._assert_supported_backend()
         if self.is_con_local:
-            if isinstance(state, list):
+            if isinstance(state, dict):
                 self.device_registry.set_state_of_devices(state)
             elif isinstance(state, str):
                 self.device_registry.load_state_from_json(state)
             else:
                 raise GControllerException("The method set_state only supports list of states or a JSON representation")
         elif self.is_con_dbus:
-            if isinstance(state, list):
-                state_json = json.dumps(state)
+            if isinstance(state, dict):
+                states_dict = {}
+                for device_name, device_state in state.iteritems():
+                    if isinstance(device_state, GDeviceState):
+                        states_dict[device_name] = device_state.as_dict()
+                    elif isinstance(device_state, dict):
+                        states_dict[device_name] = device_state
+                state_json = json.dumps(states_dict)
             elif isinstance(state, str):
                 state_json = state
             else:
@@ -1056,9 +1060,6 @@ class GlightController(GlightCommon):
                 device.disconnect()
         elif self.is_con_dbus:
             self.client.set_colors(device_name, colors)
-
-            if self.verbose:
-                print json.dumps(self.client.get_state())
 
     def quit(self):
         self._assert_supported_backend()
@@ -1343,7 +1344,6 @@ class GlightClient(GlightRemoteCommon):
     def set_colors(self, device, colors):
         self._log("Setting colors at device '{}' to {}".format(device, colors))
         self.proxy.set_colors(device, colors)
-        pass
 
     def set_breathe(self, device, color, speed, brightness):
         self._log("Setting breathe at device '{}' to color:'{}' speed:{} brightness:{}".format(device, color, speed, brightness))

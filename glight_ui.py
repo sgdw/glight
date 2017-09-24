@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import json
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -10,12 +11,66 @@ from gi.repository import Gdk
 
 import glight
 
+class GlightUiConfig(object):
+
+    def __init__(self):
+        """"""
+        self.attrs = ["last_chooser_directory"]
+        self._config_root = "~/.config/"
+        self._config_dir = "glight"
+        self._config_filename = "glight_ui.conf"
+
+        self.last_chooser_directory = None
+
+    @property
+    def config_dir(self):
+        filename = os.path.join(self._config_root, self._config_dir)
+        return os.path.expanduser(filename)
+
+    @property
+    def config_filename(self):
+        filename = os.path.join(self.config_dir, self._config_filename)
+        return os.path.expanduser(filename)
+
+    def import_dict(self, values):
+        for attr in self.attrs:
+            if attr in values:
+                self.__setattr__(attr, values[attr])
+
+        return self
+
+    def as_dict(self):
+        data = {}
+        for attr in self.attrs:
+            data[attr] = self.__getattribute__(attr)
+        return data
+
+    def load(self):
+        """"""
+        if os.path.isfile(self.config_filename):
+            with open(self.config_filename, "r") as config_file:
+                config_json = config_file.read()
+                if config_json is not None:
+                    config = json.loads(config_json)
+                    if isinstance(config, dict):
+                        self.import_dict(config)
+
+    def save(self):
+        """"""
+        if not os.path.isfile(self.config_filename):
+            if not os.path.isdir(self.config_dir):
+                os.makedirs(self.config_dir)
+            with open(self.config_filename, "w") as config_file:
+                config_file.write(json.dumps(self.as_dict(), indent=4))
+
 class GlightUi:
 
     def __init__(self):
         self.state_file_extension = "gstate"
+        self.config = GlightUiConfig()
+        self.config.load()
 
-        self.gladefile = "glight-ui.glade"
+        self.gladefile = "glight_ui.glade"
         self.builder = Gtk.Builder()
 
         self.registry = None # type: glight.GDeviceRegistry
@@ -205,7 +260,11 @@ class GlightUi:
             Gtk.FileChooserAction.OPEN,
             (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OPEN, Gtk.ResponseType.OK))
 
-        dialog.set_current_folder(os.path.expanduser("~"))  # HACK
+        if self.config.last_chooser_directory is not None \
+                and os.path.isdir(self.config.last_chooser_directory):
+            dialog.set_current_folder(os.path.expanduser(self.config.last_chooser_directory))
+        else:
+            dialog.set_current_folder(os.path.expanduser("~"))  # Home
 
         self.add_filters(dialog)
 
@@ -245,6 +304,9 @@ class GlightUi:
             state_json = self.proxy.convert_state_to_json(state)
 
             filename = dialog.get_filename()
+            dirname = os.path.dirname(filename)
+            self.config.last_chooser_directory = dirname
+            self.config.save()
 
             if not filename.endswith(".{0}".format(self.state_file_extension)):
                 filename = filename + "." + self.state_file_extension

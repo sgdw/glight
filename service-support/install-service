@@ -35,13 +35,14 @@ fi
 
 echo Copy files
 cp -v ../glight.* /usr/local/lib/glight/
-cp -v ../glight-ui.* /usr/local/lib/glight/
+cp -v ../glight_*.* /usr/local/lib/glight/
+rm -v /usr/local/lib/glight/*.pyc
 
 target=/usr/local/lib/glight/glight.py
 chown root:root "$target"
 chmod 755 "$target"
 
-target=/usr/local/lib/glight/glight-ui.py
+target=/usr/local/lib/glight/glight_ui.py
 chown root:root "$target"
 chmod 755 "$target"
 
