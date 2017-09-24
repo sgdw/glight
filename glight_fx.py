@@ -88,6 +88,67 @@ class ColorUtils(object):
         # rgb_triplet_to_display= hsv_to_rgb(transition3(value, maximum, start_triplet, end_triplet))
 
 
+class ColorScale(object):
+
+    def __init__(self, colors=None, value_points=None, is_percent_based=False):
+        """"""
+        self.colors = colors or []
+        self.value_points = value_points or []
+        self.is_percent_based = is_percent_based
+
+        if len(self.colors) != len(self.value_points):
+            raise "Number of elements in colors and value_points must be equal"
+
+    def add_point(self, value, color):
+        if isinstance(color, str):
+            color = ColorUtils.col_hex_to_triplet(color)
+        self.value_points.append(value)
+        self.colors.append(color)
+
+    def get_color(self, val, max_val):
+        if self.is_percent_based:
+            target_val = val/max_val
+        else:
+            target_val = val
+
+        color_a, color_b = self.get_color_tuple_for(target_val)
+
+        if color_a[0] == color_b[0]:
+            return color_a[1]
+        else:
+            vrange = color_b[0] - color_a[0]
+            sub_value = target_val - color_a[0]
+
+            return ColorUtils.color_lerp(sub_value, vrange, color_a[1], color_b[1])
+
+    def get_color_tuple_for(self, val):
+        point_a = [None, None]
+        point_b = [None, None]
+        for i, value_point in enumerate(self.value_points):
+            next_value_point = None
+            if len(self.value_points) > i + 1:
+                next_value_point = self.value_points[i+1]
+
+            if val >= value_point and (next_value_point is None or val < next_value_point):
+
+                point_a[0] = value_point
+                point_a[1] = self.colors[i]
+                if next_value_point is None:
+                    point_b[0] = value_point
+                    point_b[1] = self.colors[i]
+                else:
+                    point_b[0] = self.value_points[i + 1]
+                    point_b[1] = self.colors[i + 1]
+                break
+
+        if point_a[0] is None:
+            point_a[0] = self.value_points[0]
+            point_a[1] = self.colors[0]
+            point_b = point_a
+
+        return tuple(point_a), tuple(point_b)
+
+
 class ValueSource(object):
 
     def __init__(self):
@@ -161,9 +222,9 @@ class CpuxEffect(GlightEffect):
         vsrc = CpuLoadSource()
         vsrc_range = vsrc.get_value_range()
 
-        col_scale = [
-            ColorUtils.col_hex_to_triplet("0000ff"), ColorUtils.col_hex_to_triplet("ff0000")
-        ]
+        col_scale = ColorScale()
+        col_scale.add_point(0.0,   "0000ff")
+        col_scale.add_point(100.0, "ff0000")
 
         vals = None
         while True:
@@ -175,7 +236,7 @@ class CpuxEffect(GlightEffect):
             for device in args.device:
                 colors = []
                 for i, cpu_percent in enumerate(vals):
-                    col3 = ColorUtils.color_lerp(cpu_percent, vsrc_range[1], col_scale[0], col_scale[1])
+                    col3 = col_scale.get_color(cpu_percent, vsrc_range[1])
                     colors.append(ColorUtils.col_triplet_to_hex(col3))
 
                 self.client.set_colors(device, colors)
