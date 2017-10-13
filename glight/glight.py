@@ -922,12 +922,13 @@ class GlightController(GlightCommon):
         self._assert_supported_backend()
         device_list = {}
         if self.is_con_local:
-            devices = self.device_registry.find_devices()
+            gdevices = self.device_registry.find_devices()
+            for gdevice in gdevices:
+                device_list[gdevice.device_name_short] = gdevice.device_name
         elif self.is_con_dbus:
             devices = self.client.list_devices()
-
-        for device_name_short, device_name in devices.iteritems():
-            device_list[device_name_short] = device_name
+            for device_name_short, device_name in devices.iteritems():
+                device_list[device_name_short] = device_name
 
         return device_list
 
@@ -1424,11 +1425,11 @@ class GlightApp(object):
         argsparser = argparse.ArgumentParser(
             description='Changes the colors on some Logitech devices (V' + app_version + ')', add_help=False)
 
-        argsparser.add_argument('-d', '--device',  dest='device',  nargs='?', action='store', help='set device', metavar='device_name')
+        argsparser.add_argument('-d', '--device',  dest='device',  nargs='?', action='store', help='select device (#DEVICES)', metavar='device_name')
         argsparser.add_argument('-c', '--color',   dest='colors',  nargs='+', action='store', help='set color(s)', metavar='color')
-        argsparser.add_argument('-x', '--cycle',   dest='cycle',   nargs='+', action='store', help='set time',  metavar='speed, brightness')
-        argsparser.add_argument('-b', '--breathe', dest='breathe', nargs='+', action='store', help='set breathing animation', metavar='color, speed, brightness')
-        argsparser.add_argument('--backend',       dest='backend', nargs=1,   action='store', help='set backend (usb1, pyusb)', metavar='(usb1|pyusb)')
+        argsparser.add_argument('-x', '--cycle',   dest='cycle',   nargs='+', action='store', help='set color cycle animation',  metavar='#X') #,  metavar='speed [brightness]')
+        argsparser.add_argument('-b', '--breathe', dest='breathe', nargs='+', action='store', help='set breathing animation',  metavar='#B') #, metavar='color [speed [brightness]]')
+        argsparser.add_argument('--backend',       dest='backend', nargs=1,   action='store', help='set backend (usb1, pyusb), usb1 is strongly recommended', metavar='(usb1|pyusb)')
 
         argsparser.add_argument('--state-file',    dest='state_file', nargs='?', action='store', help='file where the state is saved', metavar='filename')
         argsparser.add_argument('--load-state',    dest='load_state', action='store_const', const=True, help='load state from state file')
@@ -1456,8 +1457,38 @@ class GlightApp(object):
             args=GlightApp.get_args()
 
         if args.help:
-            GlightApp.get_argsparser().print_help()
-            print()
+            reg = GDeviceRegistry()
+
+            help = GlightApp.get_argsparser().format_help()
+            help = help.replace("#X [#X ...]", "speed [brightness]")
+            help = help.replace("#B [#B ...]", "color [speed [brightness]]")
+
+            dev_info = ""
+            for gdevice in reg.known_devices:
+                if len(dev_info) > 0:
+                    dev_info = dev_info + "|"
+                dev_info = dev_info + gdevice.device_name_short
+
+            help = help.replace("#DEVICES", dev_info)
+            print help
+
+            print("Color values are always given in hex RRGGBB format e.g. ffb033.")
+            print
+
+            print("Value ranges for each device are:")
+            for gdevice in reg.known_devices:
+                print
+                print("  {0} ({1})".format(gdevice.device_name, gdevice.device_name_short))
+                print("      {0}: {1}".format("Color segments", gdevice.max_color_fields or 1))
+
+                spec = gdevice.speed_spec  # type: GValueSpec
+                print("      {0}: {1} .. {2} (default {3})".format("Speed", spec.min_value, spec.max_value, spec.default_value))
+
+                spec = gdevice.bright_spec  # type: GValueSpec
+                print("      {0}: {1} .. {2} (default {3})".format("Brightness", spec.min_value, spec.max_value, spec.default_value))
+
+            # GlightApp.get_argsparser().print_help()
+            print
             sys.exit(0)
 
         # if args.verbose:
