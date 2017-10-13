@@ -67,6 +67,7 @@ if [ ! "$USER" == "root" ]; then
     echo " Alternatively you could be brave and run this script as root."
     echo "====================================================================="
     do_explain_only=1
+    do_setup=1
 else
     do_setup=1
 fi
@@ -236,7 +237,7 @@ if [ $do_explain_only -eq 1 ] && [ $do_setup -eq 1 ]; then
         echob "* Setup runlevel for glight service"
         echo
         echo "You want to start the service at system start."
-        echo "Command: update-rc.d glight start 80 2 3 4 5 stop 20 0 1 6"
+        echo "Command: update-rc.d glight defaults 80 20"
         echo
     fi
 
