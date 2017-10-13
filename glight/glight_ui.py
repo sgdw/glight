@@ -3,6 +3,7 @@
 
 import os
 import json
+import argparse
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -10,6 +11,8 @@ from gi.repository import Gtk
 from gi.repository import Gdk
 
 import glight
+
+app_version="0.1"
 
 class GlightUiConfig(object):
 
@@ -65,7 +68,7 @@ class GlightUiConfig(object):
 
 class GlightUi:
 
-    def __init__(self):
+    def __init__(self, backend_type=None):
         self.state_file_extension = "gstate"
         self.config = GlightUiConfig()
         self.config.load()
@@ -75,6 +78,10 @@ class GlightUi:
 
         self.registry = None # type: glight.GDeviceRegistry
         self.proxy = None # type: glight.GlightController
+
+        self.backend_type = glight.GlightController.BACKEND_DBUS
+        if backend_type is not None:
+            self.backend_type = backend_type
 
         self.device_states = None
 
@@ -103,7 +110,8 @@ class GlightUi:
         self.init_ui()
 
     def init_ui(self):
-        self.builder.add_from_file(self.gladefile)
+        base = os.path.dirname(os.path.realpath(__file__))
+        self.builder.add_from_file(os.path.join(base, self.gladefile))
 
         self.window = self.builder.get_object("window")
         self.window.set_title("GLight-UI")
@@ -137,7 +145,7 @@ class GlightUi:
         self.window.show()
 
     def setup_backend(self):
-        self.proxy = glight.GlightController(glight.GlightController.BACKEND_DBUS)
+        self.proxy = glight.GlightController(self.backend_type)
         self.registry = glight.GDeviceRegistry()
 
     def sync_ui(self):
@@ -384,5 +392,13 @@ class GlightUi:
 
 
 if __name__ == "__main__":
-  main = GlightUi()
-  Gtk.main()
+    argsparser = argparse.ArgumentParser(
+        description='Changes the colors on some Logitech devices (V' + app_version + ')', add_help=False)
+    argsparser.add_argument('-d', '--direct-mode', dest='direct_mode', action='store_const', const=True, help='run directly against usb interface')
+    args = argsparser.parse_args()
+
+    if args.direct_mode:
+        main = GlightUi(glight.GlightController.BACKEND_LOCAL)
+    else:
+        main = GlightUi()
+    Gtk.main()
