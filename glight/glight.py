@@ -1441,7 +1441,7 @@ class GlightApp(object):
         argsparser.add_argument('-h', '--help',    dest='help',    action='store_const', const=True, help='show help')
 
         argsparser.add_argument('--experimental', dest='experimental', nargs='*', action='store',
-                                help='experimental features')
+                                help='experimental features', metavar='name')
 
         return argsparser
 

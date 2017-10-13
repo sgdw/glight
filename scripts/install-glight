@@ -1,0 +1,481 @@
+#!/usr/bin/env bash
+
+ask_yn() {
+    local var_name=$1
+    local explicit_confirmation=$2
+    local got_answer=0
+
+    while [ $got_answer -eq 0 ]; do
+        read choice_ask
+        if [ "$explicit_confirmation" == "1" ] && [ "$choice_ask" == "" ]; then
+            echo
+            echob "Just hitting enter won't do this time ;)"
+            echobn "Choose y or n: "
+        else
+            if [ "$choice_ask" == "" ] || [ "$choice_ask" == "y" ] || [ "$choice_ask" == "Y" ]; then
+                got_answer=1
+                eval $var_name="1"
+            fi
+            if [ "$choice_ask" == "n" ] || [ "$choice_ask" == "N" ]; then
+                got_answer=1
+                eval $var_name="0"
+            fi
+            if [ $got_answer -eq 0 ]; then
+                echo "Please enter 'y' or 'n'"
+            fi
+        fi
+    done
+}
+
+echob() {
+    echo -e "${tbolb}$1${tnorm}"
+}
+
+echobn() {
+    echo -n -e "${tbolb}$1${tnorm}"
+}
+
+tbolb="\e[1m"
+tnorm="\e[0m"
+
+myhome=$(dirname $0)
+cd $myhome # Just in case
+
+service_config_file="/etc/glight.conf"
+
+do_setup=0
+do_explain_only=0
+do_remove=0
+
+setup_service=0
+setup_service_autostart=0
+setup_dbus=0
+move_files=0
+write_config=0
+
+target_path=/usr/local/lib/glight
+
+choices=()
+
+if [ ! "$USER" == "root" ]; then
+    echo
+    echo "====================================================================="
+    echo -e " ${tbolb}You are not running this script as root.${tnorm}"
+    echo -e " This is ${tbolb}NOT a problem${tnorm}. In fact it's a good idea ;)"
+    echo ""
+    echo " At the end this script will tell you how to setup glight manually."
+    echo " Alternatively you could be brave and run this script as root."
+    echo "====================================================================="
+    do_explain_only=1
+else
+    do_setup=1
+fi
+
+if [ "$1" == "--remove" ]; then
+    do_remove=1
+    do_setup=0
+else
+    echo
+    echob "Note: you can always remove glight by running:"
+    echob "  $0 --remove"
+fi
+
+if [ $do_remove -eq 0 ]; then
+    echo
+    echobn "* Do you want to move the files to another path? [Y/n]: "
+    ask_yn choice_move_files
+    if [ $choice_move_files -eq 1 ]; then
+        echo "Choice: Yes, move files please."
+        move_files=1
+    fi
+
+    if [ "$move_files" -eq "1" ]; then
+        echo
+        echobn "* Target path will be '$target_path'. Enter a different path or leave blank for the default: "
+        read choice_target_path
+        if [ "$choice_target_path" == "" ]; then
+            echo "Choice: the path '$target_path' is fine. Keep it."
+            choices+=("Keep files at '$target_path'")
+        else
+            target_path="$choice_target_path"
+            echo "Choice: please use '$target_path' instead."
+            choices+=("Move files to '$target_path'")
+
+            if [ -d "$target_path" ]; then
+                echo
+                echo "Target path already exists!"
+                echobn "* Is it OK to overwrite the files? [Y/n]: "
+                ask_yn choice_overwrite_destination
+                if [ $choice_overwrite_destination == 0 ]; then
+                    echo "Aborting installation"
+                    exit
+                else
+                    echo "Choice: Overwrite files at '$target_path'."
+                    choices+=("Overwrite files at '$target_path'")
+                fi
+            fi
+        fi
+    else
+        choices+=("Do not move files")
+    fi
+
+    echo
+    echobn "* Do you want to setup glight as a service? [Y/n]: "
+    ask_yn choice_setup_service
+    if [ $choice_setup_service -eq 1 ]; then
+        echo "Choice: Yes, install service please."
+        choices+=("Install service")
+
+        setup_service=1
+        setup_dbus=1
+        write_config=1
+
+        echo
+        echobn "* Do you want the glight service to be automatically started? [Y/n]: "
+        ask_yn choice_setup_service_autostart
+        if [ $choice_setup_service_autostart -eq 1 ]; then
+            echo "Choice: Yes, start service automatically."
+            choices+=("Automatically start service")
+            setup_service_autostart=1
+        else
+            echo "Choice: No, I'll start the service manually."
+            choices+=("Do not start service at startup")
+        fi
+
+        if [ -f "$service_config_file" ]; then
+            echo -e "${tbolb}* Config file 'service_config_file' already exists!${tnorm}"
+            echobn "Do you want to update the config file? [Y/n]: "
+            ask_yn choice_update_config
+            if [ $choice_update_config -eq 1 ]; then
+                echo "Choice: Yes, update config file '$service_config_file'."
+                choices+=("Update config file '$service_config_file'")
+            else
+                echo "Choice: No, leave config file alone."
+                choices+=("Leave config file '$service_config_file' as it is")
+                echo "Please make sure 'glight_path' in your config file points to the correct loaction '$target_path'."
+                write_config=0
+            fi
+        fi
+
+    else
+        echo "Choice: No, I don't need a service."
+        choices+=("Do not install service")
+        echo
+        echo "To run glight in service mode you will need to install a DBUS profile."
+        echo
+        echobn "* Do you want to install the DBUS profile? [Y/n]: "
+        ask_yn choice_setup_dbus
+        if [ $choice_setup_dbus -eq 1 ]; then
+            echo "Choice: setup DBUS profile."
+            choices+=("Setup the DBUS profile")
+            setup_dbus=1
+        fi
+    fi
+
+    echo
+    echo "====================================================================="
+    echob "Your choices so far have been:"
+    for choice in "${choices[@]}"; do
+        echo "- $choice"
+    done
+    echo "====================================================================="
+fi
+
+if [ $do_explain_only -eq 1 ] && [ $do_setup -eq 1 ]; then
+
+    echob "Manual installation"
+    echo
+    echo "Since you opted out of setting things up by this script, I will "
+    echo "explain the manual steps ..."
+    echo
+
+    if [ $move_files -eq 1 ]; then
+        echob "* Moving files around"
+        echo
+        echo "Create directory '$target_path'."
+        echo "Command: mkdir \"$target_path\""
+        echo
+        echo "Setup proper permissions."
+        echo "Command: chown root:root \"$target_path\" && chmod 755 \"$target_path\""
+        echo
+        echo "Copy all files from this directory to '$target'."
+        echo "Command: cp ../* \"$target_path/\""
+        echo
+        echo "Setup proper permissions."
+        echo "Command: chown root:root \"$target_path/glight/*.py\" && chmod 755 \"$target_path/glight/*.py\""
+        echo
+    fi
+
+    if [ $setup_dbus -eq 1 ]; then
+        echob "* Setting up DBUS"
+        echo
+        echo "The DBUS interface needs a profile, which defines which clients are allowed to connect to it."
+        echo "Copy the file 'etc-dbus-1/de.sgdw.linux.glight.conf' to '/etc/dbus-1/':"
+        echo "Command: cp etc-dbus-1/de.sgdw.linux.glight.conf /etc/dbus-1/de.sgdw.linux.glight.conf"
+        echo ""
+    fi
+
+    if [ $setup_service -eq 1 ]; then
+        echob "* Setting up glight as a service"
+        echo
+        echo "Copy the service script from 'etc-init.d/glight' to '/etc/init.d/glight'"
+        echo "Command: cp etc-init.d/glight /etc/init.d/glight"
+        echo
+        echo "Setup proper permissions."
+        echo "Command: chown root:root \"/etc/init.d/glight\" && chmod 755 \"/etc/init.d/glight\""
+        echo
+        echo "Copy the default config file to '/etc/glight.conf'."
+        echo "Command: cp etc/glight.conf /etc/glight.conf"
+        echo
+        echo "Setup proper permissions."
+        echo "Command: chown root:root \"/etc/glight.conf\" && chmod 755 \"/etc/glight.conf\""
+        echo
+    fi
+
+    if [ $setup_service_autostart -eq 1 ]; then
+        echob "* Setup runlevel for glight service"
+        echo
+        echo "You want to start the service at system start."
+        echo "Command: update-rc.d glight start 80 2 3 4 5 stop 20 0 1 6"
+        echo
+    fi
+
+    echo "====================================================================="
+    echo
+    echo "Of course this should all be run as root, sudo ... "
+    echo
+    echo "Now you are done :)"
+    echo
+fi
+
+if [ $do_explain_only -eq 0 ] && [ $do_setup -eq 1 ]; then
+    echob "Automatic installation"
+    echo
+
+    echobn "* Do you want to install now? [y/n]: "
+    ask_yn choice_install 1
+    if [ $choice_install -eq 0 ]; then
+        echo "Choice: not install"
+        echo
+        echo "I will stop now. Please run again, if you changed your mind ;)"
+        echo
+        exit
+    fi
+    echo
+
+    if [ $setup_service -eq 1 ]; then
+        if [ -f "/etc/init.d/glight" ]; then
+            echob "Stopping service ..."
+            /etc/init.d/glight stop
+            echob "done."
+            echo
+        fi
+    fi
+
+    if [ $setup_dbus -eq 1 ]; then
+        echob "Setup DBUS profile ..."
+        cp etc-dbus-1/de.sgdw.linux.glight.conf /etc/dbus-1/de.sgdw.linux.glight.conf
+        echob "done."
+        echo
+    fi
+
+    if [ $move_files -eq 1 ]; then
+        src=
+        target=/usr/local/lib/glight
+        if [ ! -d "$target" ]; then
+            echob "Create directory ..."
+            mkdir target
+            chown root:root "$target"
+            chmod 755 "$target"
+        echob "done."
+        echo
+        fi
+
+        echob "Copy files ..."
+        cp -v ../*.txt   "$target_path/"
+        cp -v ../*.rst   "$target_path/"
+        cp -v ../*.in    "$target_path/"
+        cp -v ../*.py    "$target_path/"
+        cp -v -r ../glight  "$target_path/"
+        cp -v -r ../scripts "$target_path/"
+        rm -v $target_path/*.pyc 2> /dev/null
+        echob "done."
+        echo
+
+        echob "Setting permissions ..."
+        target="$target_path/glight/*.py"
+        chown root:root $target
+        chmod 755 $target
+
+        target="$target_path/glight/test/*.py"
+        chown root:root $target
+        chmod 755 $target
+        echob "done."
+        echo
+    fi
+
+    if [ $setup_service -eq 1 ]; then
+        echo -e "${tbolb}Install init script ..."
+        src=etc-init.d/glight
+        target=/etc/init.d/glight
+        cp "$src" "$target"
+        chown root:root $target
+        chmod 755 $target
+        echob "done."
+        echo
+
+        if [ "$write_config" -eq 1 ]; then
+            echo -e "${tbolb}Writing config file '$service_config_file' ..."
+            echo "# Generated config for glight" > $service_config_file
+            echo "glight_path=\"$target_path\"" >> $service_config_file
+            echo "# glight_log_file=\"/var/log/NAMEYOUR.log\"" >> $service_config_file
+            echo "# glight_state_path=\"/var/glight\"" >> $service_config_file
+            echob "done."
+            echo
+        fi
+
+    fi
+
+    if [ $setup_service_autostart -eq 1 ]; then
+        echob "Setup runlevel for glight service ..."
+        echo "[ Note from glight: This will throw a bunch of warnings on *buntu. But it will work ... promissed :) ]"
+        # update-rc.d glight start 80 2 3 4 5 stop 20 0 1 6
+        update-rc.d glight defaults 80 20
+        echob "done."
+        echo
+
+        # Old crappy version
+        #    src=../init.d/glight
+        #    # ----------------------------
+        #    echo "Setup runlevel 5 ..."
+        #    cd /etc/rc5.d
+        #    target=S08glight
+        #    if [ ! -f "$target" ]; then
+        #        ln -s "$src" "$target"
+        #    fi
+        #    # ----------------------------
+        #    echo Setup runlevel 0
+        #    cd /etc/rc0.d
+        #    target=K01glight
+        #    if [ ! -f "$target" ]; then
+        #        ln -s "$src" "$target"
+        #    fi
+        #    # ----------------------------
+        #    echo Setup runlevel 6
+        #    cd /etc/rc6.d
+        #    target=K01glight
+        #    if [ ! -f "$target" ]; then
+        #        ln -s "$src" "$target"
+        #    fi
+    fi
+
+    if [ $setup_service -eq 1 ]; then
+        echob "Starting service ..."
+        /etc/init.d/glight restart
+        echob "done."
+        echo
+    fi
+    # ------------------------------------------------------------------------------
+    echo "====================================================================="
+    echob "All finished. Have fun :)"
+fi
+
+if [ $do_remove -eq 1 ]; then
+    echo
+    echo "====================================================================="
+    echob "Semi-automatic removal of glight"
+    echo
+    echo "This part of the script will only disable the service and tell you"
+    echo "which files to delete."
+    echo
+    echo "Hey I don't want to be responsible for ruining your system ;)"
+    echo
+
+    echobn "* Do you want to (partially) remove glight? [y/n]: "
+    ask_yn choice_remove 1
+    if [ $choice_remove -eq 0 ]; then
+        echo "Choice: don't remove"
+        echo
+        echo "I will stop now. Please run again, if you changed your mind ;)"
+        echo
+        exit
+    fi
+    echo
+
+
+    if [ -f "/etc/init.d/glight" ]; then
+        echob "* Stopping the service"
+        echo
+        if [ $do_explain_only -eq 1 ]; then
+            echo "Command: /etc/init.d/glight stop"
+        else
+            echob "Stopping service ..."
+            /etc/init.d/glight stop
+            echob "done."
+        fi
+
+        echo
+        echob "* Removing autostart of service"
+        echo
+        if [ $do_explain_only -eq 1 ]; then
+            echo "Command: update-rc.d glight remove"
+        else
+            echob "Remove runlevel for glight service ..."
+            echo "[ Note from glight: This will throw a bunch of warnings on *buntu. But it will work ... promissed :) ]"
+            update-rc.d glight remove
+            echob "done."
+            echo
+        fi
+
+    else
+        echo "Service not found. Can't stop it!"
+    fi
+
+    echob "* Removing files (kind of)"
+    echo
+
+    if [ -f "/etc/glight.conf" ]; then
+        source /etc/glight.conf
+
+        if [ "$glight_path" == "" ]; then
+            echo "Configuration '/etc/glight.conf' dows not contain 'glight_path'. Don't know where glight is installed."
+        else
+
+            if [ -f "$glight_log_file" ]; then
+                echo "Manually (!) remove logfile '$glight_log_file'"
+            fi
+
+            statedir=/var/glight
+            if [ ! "$glight_state_path" == "" ]; then
+                statedir="$glight_state_path"
+            fi
+
+            if [ -f "$statedir/glight.gstate" ]; then
+                echo "Manually (!) remove gstate file '$statedir/glight.gstate'"
+            fi
+
+            if [ -d "$glight_path" ]; then
+                echo "Manually (!) remove directory '$glight_path'"
+            fi
+
+        fi
+
+    else
+        echo "Could not find '/etc/glight.conf'. Don't know where glight is installed."
+        echo "Can not tell you which files from the installation directory to delete. Sorry."
+        echo
+    fi
+
+    if [ -f "/etc/glight.conf" ]; then
+        echo "Manually (!) remove config '/etc/glight.conf'"
+    fi
+
+    if [ -f "/etc/init.d/glight" ]; then
+        echo "Manually (!) remove service script '/etc/init.d/glight'"
+    fi
+
+    echo
+    echo "====================================================================="
+    echob "All finished. Come back soon :)"
+
+fi
