@@ -4,6 +4,7 @@
 import os
 import json
 import argparse
+import traceback
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -404,8 +405,34 @@ if __name__ == "__main__":
         print
         exit()
 
-    if args.direct_mode:
-        main = GlightUi(glight.GlightController.BACKEND_LOCAL)
-    else:
-        main = GlightUi()
-    Gtk.main()
+
+    try:
+
+        if args.direct_mode:
+            main = GlightUi(glight.GlightController.BACKEND_LOCAL)
+        else:
+            main = GlightUi()
+        Gtk.main()
+
+    except Exception as ex:
+
+        print("Exception: {}".format(ex))
+        print(traceback.format_exc())
+
+        msg = "Exception '{0}' [{1}]".format(ex.message, type(ex).__name__)
+
+        user_msg=None
+        if "org.freedesktop.DBus.Error.ServiceUnknown" in ex.message:
+            user_msg = "Could not connect to the glight service!\n\nIs the service running?"
+        elif "USBErrorAccess" in type(ex).__name__:
+            user_msg = "Could not access device directly via usb!\n\nYou might want to try running the application as root."
+
+        if user_msg is not None:
+            msg = user_msg + "\n\n" + msg
+
+        md = Gtk.MessageDialog(None,
+                               Gtk.DialogFlags.DESTROY_WITH_PARENT,
+                               Gtk.MessageType.ERROR,
+                               Gtk.ButtonsType.CLOSE,
+                               msg)
+        md.run()

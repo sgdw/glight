@@ -34,9 +34,12 @@ import array
 import json
 
 # PyUSB
-import usb.core
-import usb.control
-import usb.util
+try:
+    import usb.core
+    import usb.control
+    import usb.util
+except:
+    pass # ignore
 
 # PyUSB
 import usb1
