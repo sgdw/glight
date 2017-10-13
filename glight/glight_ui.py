@@ -393,9 +393,16 @@ class GlightUi:
 
 if __name__ == "__main__":
     argsparser = argparse.ArgumentParser(
-        description='Changes the colors on some Logitech devices (V' + app_version + ')', add_help=False)
-    argsparser.add_argument('-d', '--direct-mode', dest='direct_mode', action='store_const', const=True, help='run directly against usb interface')
+        description='UI to change the colors on some Logitech devices (V' + app_version + ')', add_help=False)
+    argsparser.add_argument('-d', '--direct-mode', dest='direct_mode', action='store_const', const=True,
+                            help='run directly against usb interface; might be necessary to run as root')
+    argsparser.add_argument('-h', '--help', dest='help', action='store_const', const=True, help='show help')
     args = argsparser.parse_args()
+
+    if args.help:
+        argsparser.print_help()
+        print
+        exit()
 
     if args.direct_mode:
         main = GlightUi(glight.GlightController.BACKEND_LOCAL)
