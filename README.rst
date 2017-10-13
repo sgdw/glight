@@ -108,10 +108,9 @@ Running the UI using the device directly.
 Running the glight_fx
 ---------------------
 
-Running the UI using the service.
+Running an effect.
 
-    glight_fx.py
-
+    glight_fx.py -C -d g203 -e cpux
 
 
 Usage glight.py

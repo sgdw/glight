@@ -1233,7 +1233,7 @@ class GlightService(GlightRemoteCommon):
                 print("set_color_at('{}', '{}', {})".format(device_name, color, field))
                 device.send_color_command(color, field)
             else:
-                print("Device '{}' not found".format(device_name))
+                raise GDeviceException("Device '{}' not found".format(device_name))
         finally:
             self.close_device(device)
 
@@ -1245,7 +1245,7 @@ class GlightService(GlightRemoteCommon):
                 print("set_colors('{}', {})".format(device_name, colors))
                 device.send_colors_command(colors)
             else:
-                print("Device '{}' not found".format(device_name))
+                raise GDeviceException("Device '{}' not found".format(device_name))
         finally:
             self.close_device(device)
 
@@ -1260,7 +1260,7 @@ class GlightService(GlightRemoteCommon):
                     speed=self.unmarshall_num_par(speed),
                     brightness=self.unmarshall_num_par(brightness))
             else:
-                print("Device '{}' not found".format(device_name))
+                raise GDeviceException("Device '{}' not found".format(device_name))
         finally:
             self.close_device(device)
 
@@ -1274,7 +1274,7 @@ class GlightService(GlightRemoteCommon):
                     speed=self.unmarshall_num_par(speed),
                     brightness=self.unmarshall_num_par(brightness))
             else:
-                print("Device '{}' not found".format(device_name))
+                raise GDeviceException("Device '{}' not found".format(device_name))
         finally:
             self.close_device(device)
 
