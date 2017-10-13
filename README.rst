@@ -26,10 +26,45 @@ Supported features
 How to install
 ==============
 
+Requirements
+------------
+
+*Note: The following requirements can also be installed via the installation
+script ``support/install-glight``*
+
+Python PIP::
+
+    sudo apt install python-pip
+
+GTK3::
+
+    sudo apt install python-gi python-gi-cairo python3-gi python3-gi-cairo gir1.2-gtk-3.0
+
+libusb1::
+
+    sudo pip install libusb1
+
+PyDBUS::
+
+    sudo pip install pydbus
+
+Yes, you actually need GTK3 even for the commandline use, because glight.py
+uses glib.MainLoop() in its libusb1 backend.
+
+
+**(Optional)** PyUSB::
+
+    sudo pip install pyusb
+
+
+The actual installation
+-----------------------
+
 Use the installation script ``support/install-glight``
 
 You will be either guided through the installation process or get instructions
-how to install manually based on your choices.
+how to install manually based on your choices. You can also consult the chapter
+"Manual installation" in this readme.
 
 How to use
 ==========
@@ -38,15 +73,15 @@ Since communicating with a hid device needs root privileges (at least on my
 machine) you will have to run these apps either as root, sudoed or run as a
 (privileged) service.
 
-Running privileged
-------------------
+Running glight privileged
+-------------------------
 
 Setting the color of your G203 mouse to red.
 
     sudo glight.py -d g203 -c ff0000
 
-Running as a service
---------------------
+Running glight as a service
+---------------------------
 
 Before running GLight as a service, you will have install a DBUS-policy.
 See section "Installing".
@@ -58,6 +93,25 @@ Starting the service (privileged).
 Setting the color in client mode. Look mom no sudo ;)
 
     glight.py -C -d g203 -c ff0000
+
+Running the glight_ui
+---------------------
+
+Running the UI using the service.
+
+    glight_ui.py
+
+Running the UI using the device directly.
+
+    sudo glight_ui.py --direct-mode
+
+Running the glight_fx
+---------------------
+
+Running the UI using the service.
+
+    glight_fx.py
+
 
 
 Usage glight.py

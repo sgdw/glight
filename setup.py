@@ -5,9 +5,9 @@ try:
 except ImportError:
     from distutils.core import setup
 
-setup(name='GLight',
+setup(name='glight',
     version='0.1',
-    description='GLight',
+    description='GLight a library for setting led colors on some Logitech devices',
     author='Martin Feil',
     author_email='foss2017@sgdw.de',
     url='https://sgdw.de',

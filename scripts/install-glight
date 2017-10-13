@@ -38,6 +38,7 @@ echobn() {
 tbolb="\e[1m"
 tnorm="\e[0m"
 
+mescript=`basename "$0"`
 myhome=$(dirname $0)
 cd $myhome # Just in case
 
@@ -52,10 +53,20 @@ setup_service_autostart=0
 setup_dbus=0
 move_files=0
 write_config=0
+install_requirements=0
 
 target_path=/usr/local/lib/glight
 
 choices=()
+
+if [ "$1" == "--help" ]; then
+    echo
+    echob "Usage: $mescript [--remove]"
+    echo
+    echo "            --remove   removes the installation"
+    echo
+    exit
+fi
 
 if [ ! "$USER" == "root" ]; then
     echo
@@ -77,11 +88,36 @@ if [ "$1" == "--remove" ]; then
     do_setup=0
 else
     echo
-    echob "Note: you can always remove glight by running:"
-    echob "  $0 --remove"
+    echob "Note: you can always remove glight by running: $mescript --remove"
 fi
 
-if [ $do_remove -eq 0 ]; then
+if [ $do_setup -eq 1 ] && [ $do_remove -eq 0 ]; then
+
+    echo
+    echob "Requirements:"
+    echo "  Software packages (via apt):"
+    echo "    python-pip"
+    echo "    python-gi"
+    echo "    python-gi-cairo"
+    echo "    python3-gi"
+    echo "    python3-gi-cairo"
+    echo "    gir1.2-gtk-3.0"
+    echo "  Python libraries (via pip):"
+    echo "    libusb1"
+    echo "    pydbus"
+    echo
+    echobn "* Do you want to install these the requirements? [Y/n]: "
+    ask_yn choice_install_requirements
+    if [ $choice_install_requirements -eq 1 ]; then
+        echo "Choice: Yes, install requirements."
+        choices+=("Install requirements")
+        install_requirements=1
+    else
+        echo "Choice: No, do not install requirements."
+        choices+=("Do not install requirements")
+        install_requirements=0
+    fi
+
     echo
     echobn "* Do you want to move the files to another path? [Y/n]: "
     ask_yn choice_move_files
@@ -143,9 +179,10 @@ if [ $do_remove -eq 0 ]; then
             choices+=("Do not start service at startup")
         fi
 
+        echo
         if [ -f "$service_config_file" ]; then
             echo -e "${tbolb}* Config file 'service_config_file' already exists!${tnorm}"
-            echobn "Do you want to update the config file? [Y/n]: "
+            echobn "  Do you want to update the config file? [Y/n]: "
             ask_yn choice_update_config
             if [ $choice_update_config -eq 1 ]; then
                 echo "Choice: Yes, update config file '$service_config_file'."
@@ -179,6 +216,7 @@ if [ $do_remove -eq 0 ]; then
     for choice in "${choices[@]}"; do
         echo "- $choice"
     done
+    echo
     echo "====================================================================="
 fi
 
@@ -186,9 +224,26 @@ if [ $do_explain_only -eq 1 ] && [ $do_setup -eq 1 ]; then
 
     echob "Manual installation"
     echo
-    echo "Since you opted out of setting things up by this script, I will "
+    echo "Since you opted out of setting things up using this script, I will "
     echo "explain the manual steps ..."
     echo
+
+    if [ $install_requirements -eq 1 ]; then
+        echob "* Installing requirements"
+        echo
+        echo "Installing Python PIP ..."
+        echo "Command: apt install python-pip"
+        echo
+        echo "Installing GTK3 ..."
+        echo "Command: apt install python-gi python-gi-cairo python3-gi python3-gi-cairo gir1.2-gtk-3.0"
+        echo
+        echo "Installing python library libusb1 ..."
+        echo "Command: pip install libusb1"
+        echo
+        echo "Installing python library PyDBUS ..."
+        echo "Command: pip install pydbus"
+        echo
+    fi
 
     if [ $move_files -eq 1 ]; then
         echob "* Moving files around"
@@ -263,6 +318,27 @@ if [ $do_explain_only -eq 0 ] && [ $do_setup -eq 1 ]; then
         exit
     fi
     echo
+
+    if [ $install_requirements -eq 1 ]; then
+        echob "* Installing prequisits"
+        echo
+
+        echob "Installing Python PIP ..."
+        sudo apt install python-pip
+        echob "done."
+
+        echob "Installing GTK3 ..."
+        sudo apt install python-gi python-gi-cairo python3-gi python3-gi-cairo gir1.2-gtk-3.0
+        echob "done."
+
+        echob "Installing python library libusb1 ..."
+        sudo pip install libusb1
+        echob "done."
+
+        echob "Installing python library PyDBUS ..."
+        sudo pip install pydbus
+        echob "done."
+    fi
 
     if [ $setup_service -eq 1 ]; then
         if [ -f "/etc/init.d/glight" ]; then

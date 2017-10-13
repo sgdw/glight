@@ -973,7 +973,6 @@ class GlightController(GlightCommon):
                 states[known_device.device_name_short] = GDeviceState().import_dict(known_device.device_state.as_dict())
         elif self.is_con_dbus:
             state_json = self.client.get_state()
-            print state_json
             state_data = json.loads(state_json)
 
             devices = self.list_devices()

@@ -395,7 +395,7 @@ class GlightUi:
 if __name__ == "__main__":
     argsparser = argparse.ArgumentParser(
         description='UI to change the colors on some Logitech devices (V' + app_version + ')', add_help=False)
-    argsparser.add_argument('-d', '--direct-mode', dest='direct_mode', action='store_const', const=True,
+    argsparser.add_argument('--direct-mode', dest='direct_mode', action='store_const', const=True,
                             help='run directly against usb interface; might be necessary to run as root')
     argsparser.add_argument('-h', '--help', dest='help', action='store_const', const=True, help='show help')
     args = argsparser.parse_args()
