@@ -206,7 +206,7 @@ Setup proper permissions.
 The DBUS interface needs a profile, which defines which clients are allowed to connect to it.
 Copy the file 'etc-dbus-1/de.sgdw.linux.glight.conf' to '/etc/dbus-1/':
 
-    cp etc-dbus-1/de.sgdw.linux.glight.conf /etc/dbus-1/de.sgdw.linux.glight.conf
+    cp etc-dbus-1/de.sgdw.linux.glight.conf /etc/dbus-1/system.d/de.sgdw.linux.glight.conf
 
 **Setting up glight as a service**
 
