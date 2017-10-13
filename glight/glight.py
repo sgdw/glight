@@ -234,8 +234,6 @@ class UsbBackendUsb1(UsbBackend):
 
     def disconnect(self):
         # free device resource to be able to reattach kernel driver
-        # usb.util.dispose_resources(self.device)
-
         try:
             if self.interface is not None:
                 self.device.releaseInterface(self.w_index)
@@ -732,7 +730,7 @@ class G203(GDevice):
 
         self.is_detached = False    # If kernel driver needs to be reattached
 
-        self.bm_request_type = usb.util.CTRL_OUT | usb.util.CTRL_RECIPIENT_INTERFACE | usb.util.CTRL_TYPE_CLASS # 0x21
+        self.bm_request_type = usb1.ENDPOINT_OUT | usb1.RECIPIENT_INTERFACE | usb1.TYPE_CLASS # 0x21
         self.bm_request      = UsbConstants.HID_REQ_SET_REPORT # 0x09
         self.w_value         = 0x0211 # ???
 
@@ -792,7 +790,7 @@ class G213(GDevice):
 
         self.is_detached = False    # If kernel driver needs to be reattached
 
-        self.bm_request_type = usb.util.CTRL_OUT | usb.util.CTRL_RECIPIENT_INTERFACE | usb.util.CTRL_TYPE_CLASS # 0x21
+        self.bm_request_type = usb1.ENDPOINT_OUT | usb1.RECIPIENT_INTERFACE | usb1.TYPE_CLASS # 0x21
         self.bm_request      = UsbConstants.HID_REQ_SET_REPORT # 0x09
         self.w_value         = 0x0211 # ???
 
