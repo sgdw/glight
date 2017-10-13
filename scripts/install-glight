@@ -326,18 +326,19 @@ if [ $do_explain_only -eq 0 ] && [ $do_setup -eq 1 ]; then
         echob "Installing Python PIP ..."
         sudo apt install python-pip
         echob "done."
-
+        echo
         echob "Installing GTK3 ..."
         sudo apt install python-gi python-gi-cairo python3-gi python3-gi-cairo gir1.2-gtk-3.0
         echob "done."
-
+        echo
         echob "Installing python library libusb1 ..."
         sudo pip install libusb1
         echob "done."
-
+        echo
         echob "Installing python library PyDBUS ..."
         sudo pip install pydbus
         echob "done."
+        echo
     fi
 
     if [ $setup_service -eq 1 ]; then
@@ -361,11 +362,11 @@ if [ $do_explain_only -eq 0 ] && [ $do_setup -eq 1 ]; then
         target=/usr/local/lib/glight
         if [ ! -d "$target" ]; then
             echob "Create directory ..."
-            mkdir target
+            mkdir "$target"
             chown root:root "$target"
             chmod 755 "$target"
-        echob "done."
-        echo
+            echob "done."
+            echo
         fi
 
         echob "Copy files ..."
