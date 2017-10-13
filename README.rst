@@ -23,6 +23,13 @@ Supported features
 - setting a breathing/pulsating color
 - setting a color cycle aka. rainbow
 
+Supported platforms
+===================
+
+This was developed an tested on a Xubuntu 16.04 LTS.
+
+It should work on other debian based systems. But who knows? :)
+
 How to install
 ==============
 
