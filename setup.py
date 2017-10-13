@@ -10,7 +10,7 @@ setup(name='glight',
     description='GLight a library for setting led colors on some Logitech devices',
     author='Martin Feil',
     author_email='foss2017@sgdw.de',
-    url='https://sgdw.de',
+    url='https://github.com/sgdw/glight',
     classifiers=[ # https://pypi.python.org/pypi?:action=list_classifiers
         'Development Status :: 4 - Beta',
         'Environment :: Console',
