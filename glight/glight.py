@@ -41,7 +41,7 @@ try:
 except:
     pass # ignore
 
-# PyUSB
+# libusb1
 import usb1
 
 import binascii
@@ -49,8 +49,12 @@ import argparse
 from time import sleep
 import traceback
 
-from pydbus import SystemBus, SessionBus
-from pydbus.generic import signal
+try:
+    from pydbus import SystemBus, SessionBus
+    from pydbus.generic import signal
+except ImportError:
+    print("pydbus library not installed. Service will not work.");
+
 try:
     from gi.repository import GLib
 except ImportError:

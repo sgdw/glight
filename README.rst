@@ -5,7 +5,7 @@ GLight controls LEDs of some Logitech devices.
 
 Included are the following applications:
 
-- **glight.py**    - commandline app for controlling color of the G-devices
+- **glight.py**    - commandline app for controlling LED colors of your G-devices
 - **glight_ui.py** - GTK-UI for glight.py
 - **glight_fx.py** - some experiments on changing colors depending on e.g. system load
 
@@ -18,17 +18,27 @@ Supported Devices
 Supported features
 ==================
 
+Device specific:
+
 - setting a single color for the complete device
 - setting different colors for the 5 available segments of the keyboard (G213 only)
 - setting a breathing/pulsating color
 - setting a color cycle aka. rainbow
+
+Other features:
+
+- load and save light presets for your devices
+- service keeps state of the lights and restores it after reboot (so no rainbow on reboot ;)
+- a nice UI if you like your software clicky
 
 Supported platforms
 ===================
 
 This was developed an tested on a Xubuntu 16.04 LTS.
 
-It should work on other debian based systems. But who knows? :)
+It should work on plain Ubuntu and other debian based linux systems. But who knows? :)
+
+As for BSD, OS-X and Windows I just can't tell.
 
 How to install
 ==============
