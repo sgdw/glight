@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 '''
 GLight controls LEDs of some Logitech devices
@@ -932,7 +932,7 @@ class GlightController(GlightCommon):
                 device_list[gdevice.device_name_short] = gdevice.device_name
         elif self.is_con_dbus:
             devices = self.client.list_devices()
-            for device_name_short, device_name in devices.iteritems():
+            for device_name_short, device_name in devices.items():
                 device_list[device_name_short] = device_name
 
         return device_list
@@ -959,7 +959,7 @@ class GlightController(GlightCommon):
         """
 
         state_dict = {}
-        for device_name, device_state in state.iteritems():
+        for device_name, device_state in state.items():
             state_dict[device_name] = device_state.as_dict()
 
         return json.dumps(state_dict)
@@ -978,7 +978,7 @@ class GlightController(GlightCommon):
             state_data = json.loads(state_json)
 
             devices = self.list_devices()
-            for device_name_short, device_name in devices.iteritems():
+            for device_name_short, device_name in devices.items():
                 if device_name_short in state_data:
                     try:
                         states[device_name_short] = GDeviceState().import_dict(state_data[device_name_short])
@@ -1002,7 +1002,7 @@ class GlightController(GlightCommon):
         elif self.is_con_dbus:
             if isinstance(state, dict):
                 states_dict = {}
-                for device_name, device_state in state.iteritems():
+                for device_name, device_state in state.items():
                     if isinstance(device_state, GDeviceState):
                         states_dict[device_name] = device_state.as_dict()
                     elif isinstance(device_state, dict):
@@ -1474,10 +1474,10 @@ class GlightApp(object):
                 dev_info = dev_info + gdevice.device_name_short
 
             help = help.replace("#DEVICES", dev_info)
-            print help
+            print(help)
 
             print("Color values are always given in hex RRGGBB format e.g. ffb033.")
-            print
+            print()
 
             print("Value ranges for each device are:")
             for gdevice in reg.known_devices:
@@ -1492,7 +1492,7 @@ class GlightApp(object):
                 print("      {0}: {1} .. {2} (default {3})".format("Brightness", spec.min_value, spec.max_value, spec.default_value))
 
             # GlightApp.get_argsparser().print_help()
-            print
+            print()
             sys.exit(0)
 
         # if args.verbose:
@@ -1540,7 +1540,7 @@ class GlightApp(object):
                 devices = client.list_devices()
                 print("{} devices:".format(len(devices)))
                 i = 0
-                for device_name_short, device_name in devices.iteritems():
+                for device_name_short, device_name in devices.items():
                     i = i + 1
                     print("[{}] {} ({})".format(i, device_name, device_name_short))
 
@@ -1611,7 +1611,7 @@ class GlightApp(object):
                 for i in range(1,6):
                     state.set_color_at(chr(ord("a")+i), i)
 
-                print json.dumps(state.as_dict())
+                print(json.dumps(state.as_dict()))
 
             else:
                 print("Unknown experimental feature '{}'".format(experiment))

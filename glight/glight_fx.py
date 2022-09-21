@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 '''
 GLight controls LEDs of some Logitech devices
@@ -241,7 +241,7 @@ class CpuxEffect(GlightEffect):
 
                 self.client.set_colors(device, colors)
                 if args.verbose:
-                    print "Colors updated {}".format(colors)
+                    print("Colors updated {}".format(colors))
 
 # App handling ----------------------------------------------------------------
 
@@ -328,9 +328,9 @@ class GlightFxApp(object):
     def handle_experiments(args, verbose=False):
         if args.experimental == "test":
             src = CpuLoadSource()
-            print src.read_cpu_usage()
+            print(src.read_cpu_usage())
         if args.experimental == "color":
-            print ColorUtils.col_hex_to_triplet("abcdef")
+            print(ColorUtils.col_hex_to_triplet("abcdef"))
 
             rgb = ColorUtils.color_lerp(
                 0.5, 1.0,
@@ -338,7 +338,7 @@ class GlightFxApp(object):
                 ColorUtils.col_hex_to_triplet("ffffff")
             )
 
-            print ColorUtils.col_triplet_to_hex(rgb)
+            print(ColorUtils.col_triplet_to_hex(rgb))
 
 
 if __name__ == "__main__":

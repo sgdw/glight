@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import os
@@ -152,8 +152,8 @@ class GlightUi:
     def sync_ui(self):
         self.device_store.clear()
         self.devices = self.proxy.list_devices()
-        for device_name_short, device_name in self.devices.iteritems():
-            print "Added '{0}' ({1})".format(device_name_short, device_name)
+        for device_name_short, device_name in self.devices.items():
+            print("Added '{0}' ({1})".format(device_name_short, device_name))
             self.device_store.append([device_name, device_name_short])
 
     def get_device_base(self, device_name_short):
@@ -191,8 +191,8 @@ class GlightUi:
             self.btn_set["fields"].set_sensitive(fields_supported)
             self.lbl_not_supported["fields"].set_visible(not fields_supported)
 
-            # print device.speed_spec.min_value
-            # print device.speed_spec.max_value
+            # print(device.speed_spec.min_value)
+            # print(device.speed_spec.max_value)
 
             if self.selected_device in self.device_states:
                 state = self.device_states[self.selected_device] # type: glight.GDeviceState
@@ -203,7 +203,7 @@ class GlightUi:
                     else:
                         color = "ffffff"
                     c = self.get_rgba_from_hex(color)
-                    print "[{0}] {1}".format(i, color)
+                    print("[{0}] {1}".format(i, color))
 
                     if i == 0:
                         self.btn_color_complete.set_rgba(c)
@@ -258,7 +258,7 @@ class GlightUi:
     def on_restore_settings(self, *args, **kwargs):
         """"""
         state = self.proxy.get_state()
-        print state
+        print(state)
         self.proxy.load_state()
 
     def on_load_state(self, widget):
@@ -359,9 +359,9 @@ class GlightUi:
         :param btn: Gtk.ColorButton
         :return:
         """
-        print btn.get_name()
-        print btn.get_color()
-        print self.get_color_hex_from_button(btn)
+        print(btn.get_name())
+        print(btn.get_color())
+        print(self.get_color_hex_from_button(btn))
 
     def on_complete_set(self, *args, **kwargs):
         """"""
