@@ -96,9 +96,9 @@ if [ $do_setup -eq 1 ] && [ $do_remove -eq 0 ]; then
     echo
     echob "Requirements:"
     echo "  Software packages (via apt):"
-    echo "    python-pip"
-    echo "    python-gi"
-    echo "    python-gi-cairo"
+    echo "    python3-pip"
+    echo "    python3-gi"
+    echo "    python3-gi-cairo"
     echo "    python3-gi"
     echo "    python3-gi-cairo"
     echo "    gir1.2-gtk-3.0"
@@ -232,10 +232,10 @@ if [ $do_explain_only -eq 1 ] && [ $do_setup -eq 1 ]; then
         echob "* Installing requirements"
         echo
         echo "Installing Python PIP ..."
-        echo "Command: apt install python-pip"
+        echo "Command: apt install python3-pip"
         echo
         echo "Installing GTK3 ..."
-        echo "Command: apt install python-gi python-gi-cairo python3-gi python3-gi-cairo gir1.2-gtk-3.0"
+        echo "Command: apt install python3-gi python3-gi-cairo python3-gi python3-gi-cairo gir1.2-gtk-3.0"
         echo
         echo "Installing python library libusb1 ..."
         echo "Command: pip install libusb1"
@@ -324,11 +324,11 @@ if [ $do_explain_only -eq 0 ] && [ $do_setup -eq 1 ]; then
         echo
 
         echob "Installing Python PIP ..."
-        sudo apt install python-pip
+        sudo apt install python3-pip
         echob "done."
         echo
         echob "Installing GTK3 ..."
-        sudo apt install python-gi python-gi-cairo python3-gi python3-gi-cairo gir1.2-gtk-3.0
+        sudo apt install python3-gi python3-gi-cairo python3-gi python3-gi-cairo gir1.2-gtk-3.0
         echob "done."
         echo
         echob "Installing python library libusb1 ..."
